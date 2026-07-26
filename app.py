@@ -2,7 +2,7 @@ import streamlit as st
 
 from portfolio_import import portfolio_betoltes
 from portfolio_analysis import portfolio_elemzes
-from portfolio_market import get_market_price
+from portfolio_value import portfolio_ertek_szamitas
 
 
 # Cím
@@ -17,10 +17,14 @@ st.write("Saját befektetési portfólió elemző rendszer")
 portfolio = portfolio_betoltes()
 
 
+# Aktuális érték számítás
+
+portfolio = portfolio_ertek_szamitas(portfolio)
+
+
 # Elemzés
 
 portfolio, teljes_ertek = portfolio_elemzes(portfolio)
-
 
 # Fő érték
 
@@ -33,6 +37,11 @@ st.metric(
 # Táblázat
 
 st.subheader("📊 Portfólió összetétel")
+
+st.dataframe(portfolio)
+
+
+st.subheader("💹 Élő piaci adatok")
 
 st.dataframe(portfolio)
 
@@ -57,31 +66,3 @@ amely **{legnagyobb['Súly %']:.2f}%**-ot képvisel.
 A jelenlegi portfólió mérsékelt koncentrációs kockázatot mutat.
 """
 )
-
-st.write(
-    f"""
-A portfólió teljes értéke **{teljes_ertek:,.0f} Ft**.
-
-A legnagyobb pozíció a **{legnagyobb['Eszköz']}**,
-amely **{legnagyobb['Súly %']:.2f}%**-ot képvisel.
-
-A jelenlegi portfólió mérsékelt koncentrációs kockázatot mutat.
-"""
-)
-
-st.subheader("📈 Élő piaci árfolyamok")
-
-tickers = {
-    "CSPX": "CSPX.L",
-    "EQQQ": "EQQQ.L",
-    "SMH": "SMH",
-    "BTC": "BTC-USD"
-}
-
-for nev, ticker in tickers.items():
-    ar = get_market_price(ticker)
-
-    st.metric(
-        label=nev,
-        value=f"{ar:,.2f}"
-    )
