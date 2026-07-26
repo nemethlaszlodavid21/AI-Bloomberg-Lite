@@ -1,14 +1,17 @@
 import yfinance as yf
 
 
+import yfinance as yf
+
+
 def get_market_price(ticker):
 
-    data = yf.download(
-        ticker,
-        period="5d",
-        progress=False
-    )
+    adat = yf.Ticker(ticker)
 
-    price = data["Close"].dropna().iloc[-1]
+    ar = adat.history(period="1d")["Close"].iloc[-1]
 
-    return round(float(price.iloc[0]), 2)
+    # Londoni tőzsde penny → font korrekció
+    if ticker.endswith(".L") and ar > 10000:
+        ar = ar / 100
+
+    return ar

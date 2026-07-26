@@ -11,5 +11,5 @@ eredmeny = portfolio_ertek_szamitas(portfolio)
 
 print(eredmeny)
 
-print("\nTeljes érték:")
-print(eredmeny["Pozíció érték"].sum())
+print("\nTeljes HUF érték:")
+print(f"{eredmeny['HUF érték'].sum():,.0f} Ft")
