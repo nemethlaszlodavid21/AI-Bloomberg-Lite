@@ -6,6 +6,7 @@ from portfolio_analysis import portfolio_elemzes
 from portfolio_value import portfolio_ertek_szamitas
 from portfolio_performance import portfolio_napi_teljesitmeny
 from portfolio_risk import risk_score_szamitas
+from portfolio_history import portfolio_tortenet
 
 # Cím
 
@@ -75,6 +76,15 @@ fig = px.pie(
 )
 
 st.plotly_chart(fig, use_container_width=True)
+
+
+st.subheader("📈 Portfólió történeti teljesítmény")
+
+tortenet = portfolio_tortenet(portfolio)
+
+st.line_chart(
+    tortenet["Portfolio"]
+)
 
 
 # Napi teljesítmény
