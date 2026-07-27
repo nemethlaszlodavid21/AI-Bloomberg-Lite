@@ -1,4 +1,5 @@
 import streamlit as st
+import plotly.express as px
 
 from portfolio_import import portfolio_betoltes
 from portfolio_analysis import portfolio_elemzes
@@ -26,12 +27,35 @@ portfolio = portfolio_ertek_szamitas(portfolio)
 
 portfolio, teljes_ertek = portfolio_elemzes(portfolio)
 
-# Fő érték
+legnagyobb = portfolio.loc[portfolio["Súly %"].idxmax()]
 
-st.metric(
-    label="💰 Teljes portfólió érték",
-    value=f"{teljes_ertek:,.0f} Ft"
-)
+# KPI kártyák
+
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    st.metric(
+        label="💰 Portfólió érték",
+        value=f"{teljes_ertek/1_000_000:.2f} M Ft"
+    )
+
+with col2:
+    st.metric(
+        label="📦 Pozíciók száma",
+        value=f"{len(portfolio)} db"
+    )
+
+with col3:
+    st.metric(
+        label="🌍 Devizák",
+        value=f"{portfolio['Deviza'].nunique()} db"
+    )
+
+with col4:
+    st.metric(
+        label="⚠️ Legnagyobb súly",
+        value=f"{legnagyobb['Súly %']:.2f}%"
+    )
 
 
 # Táblázat
@@ -40,12 +64,16 @@ st.subheader("📊 Portfólió összetétel")
 
 st.dataframe(portfolio)
 
+st.subheader("🥧 Portfólió megoszlás")
 
-st.subheader("💹 Élő piaci adatok")
+fig = px.pie(
+    portfolio,
+    values="HUF érték",
+    names="Eszköz",
+    title="Eszközallokáció"
+)
 
-st.dataframe(portfolio)
-
-legnagyobb = portfolio.loc[portfolio["Súly %"].idxmax()]
+st.plotly_chart(fig, use_container_width=True)
 
 if legnagyobb["Súly %"] > 40:
     st.error(
