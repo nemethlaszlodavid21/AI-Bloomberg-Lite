@@ -4,7 +4,8 @@ import plotly.express as px
 from portfolio_import import portfolio_betoltes
 from portfolio_analysis import portfolio_elemzes
 from portfolio_value import portfolio_ertek_szamitas
-
+from portfolio_performance import portfolio_napi_teljesitmeny
+from portfolio_risk import risk_score_szamitas
 
 # Cím
 
@@ -75,12 +76,48 @@ fig = px.pie(
 
 st.plotly_chart(fig, use_container_width=True)
 
+
+# Napi teljesítmény
+
+st.subheader("📈 Mai piaci teljesítmény")
+
+napi_adatok = portfolio_napi_teljesitmeny(portfolio)
+
+cols = st.columns(len(napi_adatok))
+
+for col, adat in zip(cols, napi_adatok):
+
+    with col:
+
+        valtozas = adat["Napi változás %"]
+
+        st.metric(
+            label=adat["Eszköz"],
+            value=f"{valtozas:.2f}%"
+        )
+
+
 if legnagyobb["Súly %"] > 40:
     st.error(
         f"⚠️ Magas koncentráció: {legnagyobb['Eszköz']} ({legnagyobb['Súly %']:.2f}%)"
     )
 else:
     st.success("✅ A portfólió megfelelően diverzifikált.")
+
+st.subheader("🧠 AI Risk Score")
+
+score, szint, uzenetek = risk_score_szamitas(portfolio)
+
+st.metric(
+    "Kockázati pontszám",
+    f"{score}/100"
+)
+
+st.write(szint)
+
+for u in uzenetek:
+    st.write(u)
+
 
 st.subheader("🤖 AI Portfolio Report")
 
