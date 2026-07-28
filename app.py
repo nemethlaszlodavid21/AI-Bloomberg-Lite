@@ -7,6 +7,10 @@ from portfolio_value import portfolio_ertek_szamitas
 from portfolio_performance import portfolio_napi_teljesitmeny
 from portfolio_risk import risk_score_szamitas
 from portfolio_history import portfolio_tortenet
+from portfolio_transactions import tranzakciok_betoltese
+from portfolio_positions import pozicio_osszesites
+from portfolio_performance_engine import teljesitmeny_szamitas
+from market_data import arak_lekerese
 
 # Cím
 
@@ -113,6 +117,72 @@ if legnagyobb["Súly %"] > 40:
     )
 else:
     st.success("✅ A portfólió megfelelően diverzifikált.")
+
+
+# Portfolió Teljesítmény
+
+st.subheader("📈 Portfolió Teljesítmény")
+
+
+tranzakciok = tranzakciok_betoltese()
+
+poziciok = pozicio_osszesites(tranzakciok)
+
+
+# Élő piaci árak lekérése
+
+aktualis_arok = arak_lekerese(
+    poziciok["Ticker"].tolist()
+)
+
+
+performance = teljesitmeny_szamitas(
+    poziciok,
+    aktualis_arok
+)
+
+
+befektetett = performance["Bekerülési érték"].sum()
+
+aktualis = performance["Aktuális érték"].sum()
+
+profit = performance["Profit"].sum()
+
+hozam = (profit / befektetett) * 100
+
+
+col1, col2, col3, col4 = st.columns(4)
+
+
+with col1:
+    st.metric(
+        "💰 Befektetett tőke",
+        f"{befektetett:,.0f}"
+    )
+
+
+with col2:
+    st.metric(
+        "📊 Aktuális érték",
+        f"{aktualis:,.0f}"
+    )
+
+
+with col3:
+    st.metric(
+        "💵 Profit",
+        f"{profit:,.0f}"
+    )
+
+
+with col4:
+    st.metric(
+        "📈 Hozam",
+        f"{hozam:.2f}%"
+    )
+
+
+st.dataframe(performance)
 
 st.subheader("🧠 AI Risk Score")
 
