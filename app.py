@@ -11,6 +11,7 @@ from portfolio_transactions import tranzakciok_betoltese
 from portfolio_positions import pozicio_osszesites
 from portfolio_performance_engine import teljesitmeny_szamitas
 from market_data import arak_lekerese
+from ai_analyst import portfolio_ai_elemzes
 
 # Cím
 
@@ -199,15 +200,13 @@ for u in uzenetek:
     st.write(u)
 
 
-st.subheader("🤖 AI Portfolio Report")
+st.subheader("🤖 AI Portfolio Analyst")
 
-st.write(
-    f"""
-A portfólió teljes értéke **{teljes_ertek:,.0f} Ft**.
-
-A legnagyobb pozíció a **{legnagyobb['Eszköz']}**,
-amely **{legnagyobb['Súly %']:.2f}%**-ot képvisel.
-
-A jelenlegi portfólió mérsékelt koncentrációs kockázatot mutat.
-"""
+ai_elemzes = portfolio_ai_elemzes(
+    portfolio,
+    performance,
+    score
 )
+
+for uzenet in ai_elemzes:
+    st.write(uzenet)
