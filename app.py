@@ -12,6 +12,7 @@ from portfolio_positions import pozicio_osszesites
 from portfolio_performance_engine import teljesitmeny_szamitas
 from market_data import arak_lekerese
 from ai_analyst import portfolio_ai_elemzes
+from watchlist import watchlist_lekerese
 
 # Cím
 
@@ -210,3 +211,19 @@ ai_elemzes = portfolio_ai_elemzes(
 
 for uzenet in ai_elemzes:
     st.write(uzenet)
+
+st.subheader("👀 Market Watchlist")
+
+watchlist = watchlist_lekerese()
+
+oszlopok = st.columns(len(watchlist))
+
+for oszlop, adat in zip(oszlopok, watchlist):
+
+    with oszlop:
+
+        st.metric(
+            label=adat["Ticker"],
+            value=f"{adat['Ár']:.2f}",
+            delta=f"{adat['Napi változás %']:.2f}%"
+        )
