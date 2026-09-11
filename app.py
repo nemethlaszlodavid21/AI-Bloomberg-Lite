@@ -15,6 +15,7 @@ from ai_analyst import portfolio_ai_elemzes
 from watchlist import watchlist_lekerese
 from watchlist_history import watchlist_tortenet
 from stock_snapshot import stock_snapshot
+from style import alkalmaz_style
 
 
 # ---------------------------------------------------
@@ -26,6 +27,8 @@ st.set_page_config(
     page_icon="📈",
     layout="wide"
 )
+
+alkalmaz_style()
 
 
 # ---------------------------------------------------
@@ -104,7 +107,6 @@ score, szint, uzenetek = risk_score_szamitas(
 # ---------------------------------------------------
 
 if "watchlist_tickerek" not in st.session_state:
-
     st.session_state.watchlist_tickerek = [
         "NVDA",
         "AAPL",
@@ -163,9 +165,7 @@ with tab1:
             value=f"{legnagyobb['Súly %']:.2f}%"
         )
 
-
     st.divider()
-
 
     # Portfólió összetétel
 
@@ -175,7 +175,6 @@ with tab1:
         portfolio,
         width="stretch"
     )
-
 
     # Pie chart
 
@@ -188,11 +187,22 @@ with tab1:
         title="Portfólió megoszlás"
     )
 
+    fig.update_layout(
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        font_color="#1f2937",
+        margin=dict(
+            l=20,
+            r=20,
+            t=50,
+            b=20
+        )
+    )
+
     st.plotly_chart(
         fig,
         width="stretch"
     )
-
 
     # Történeti teljesítmény
 
@@ -207,7 +217,6 @@ with tab1:
     st.line_chart(
         tortenet["Portfolio"]
     )
-
 
     # Napi teljesítmény
 
@@ -239,7 +248,6 @@ with tab1:
                 value=f"{valtozas:.2f}%"
             )
 
-
     # Koncentráció figyelmeztetés
 
     if legnagyobb["Súly %"] > 40:
@@ -256,9 +264,7 @@ with tab1:
             "✅ A portfólió megfelelően diverzifikált."
         )
 
-
     st.divider()
-
 
     # Portfolio Performance
 
@@ -296,12 +302,10 @@ with tab1:
             f"{hozam:.2f}%"
         )
 
-
     st.dataframe(
         performance,
         width="stretch"
     )
-
 
     # Risk Score
 
@@ -330,7 +334,6 @@ with tab2:
         "👀 Market Watchlist"
     )
 
-
     # Watchlist kezelés
 
     with st.expander(
@@ -343,7 +346,6 @@ with tab2:
         )
 
         col_add, col_remove = st.columns(2)
-
 
         with col_add:
 
@@ -373,7 +375,6 @@ with tab2:
 
                     st.rerun()
 
-
         with col_remove:
 
             eltavolitando = st.selectbox(
@@ -396,13 +397,11 @@ with tab2:
 
                     st.rerun()
 
-
     # Élő Watchlist adatok
 
     watchlist = watchlist_lekerese(
         st.session_state.watchlist_tickerek
     )
-
 
     if watchlist:
 
@@ -423,9 +422,7 @@ with tab2:
                     delta=f"{adat['Napi változás %']:.2f}%"
                 )
 
-
     st.divider()
-
 
     # Árfolyamgrafikon
 
@@ -437,7 +434,6 @@ with tab2:
         adat["Ticker"]
         for adat in watchlist
     ]
-
 
     if tickerek:
 
@@ -452,7 +448,6 @@ with tab2:
             "kivalasztott_ticker"
         ] = kivalasztott_ticker
 
-
         torteneti_adatok = watchlist_tortenet(
             kivalasztott_ticker
         )
@@ -464,6 +459,24 @@ with tab2:
             title=(
                 f"{kivalasztott_ticker} "
                 "- 30 napos árfolyam"
+            )
+        )
+
+        fig_watchlist.update_layout(
+            paper_bgcolor="#ffffff",
+            plot_bgcolor="#ffffff",
+            font_color="#1f2937",
+            margin=dict(
+                l=20,
+                r=20,
+                t=50,
+                b=20
+            ),
+            xaxis=dict(
+                showgrid=False
+            ),
+            yaxis=dict(
+                gridcolor="#e5e7eb"
             )
         )
 
@@ -483,7 +496,6 @@ with tab3:
         "🔎 Stock Snapshot"
     )
 
-
     # Ha még nem választottunk tickert,
     # AAPL legyen az alapértelmezett
 
@@ -492,11 +504,9 @@ with tab3:
         "AAPL"
     )
 
-
     snapshot = stock_snapshot(
         elemzett_ticker
     )
-
 
     st.markdown(
         f"## {snapshot['Név']}"
@@ -506,14 +516,11 @@ with tab3:
         snapshot["Ticker"]
     )
 
-
     st.divider()
-
 
     # Első KPI sor
 
     col1, col2, col3 = st.columns(3)
-
 
     with col1:
 
@@ -522,7 +529,6 @@ with tab3:
             f"${snapshot['Ár']:.2f}",
             f"{snapshot['Napi változás %']:.2f}%"
         )
-
 
     with col2:
 
@@ -549,7 +555,6 @@ with tab3:
                 "N/A"
             )
 
-
     with col3:
 
         pe = snapshot["P/E"]
@@ -561,11 +566,9 @@ with tab3:
             else "N/A"
         )
 
-
     # Második KPI sor
 
     col4, col5, col6 = st.columns(3)
-
 
     with col4:
 
@@ -574,14 +577,12 @@ with tab3:
             f"${snapshot['52W High']:.2f}"
         )
 
-
     with col5:
 
         st.metric(
             "52 hetes minimum",
             f"${snapshot['52W Low']:.2f}"
         )
-
 
     with col6:
 
