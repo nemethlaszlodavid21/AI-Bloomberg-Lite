@@ -14,6 +14,7 @@ from market_data import arak_lekerese
 from ai_analyst import portfolio_ai_elemzes
 from watchlist import watchlist_lekerese
 from watchlist_history import watchlist_tortenet
+from stock_snapshot import stock_snapshot
 
 # Cím
 
@@ -82,7 +83,7 @@ fig = px.pie(
     title="Eszközallokáció"
 )
 
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 
 st.subheader("📈 Portfólió történeti teljesítmény")
@@ -325,5 +326,83 @@ if tickerek:
 
     st.plotly_chart(
         fig_watchlist,
-        use_container_width=True
+        width="stretch"
+    )
+
+# Stock Snapshot
+
+st.subheader("🔎 Stock Snapshot")
+
+snapshot = stock_snapshot(
+    kivalasztott_ticker
+)
+
+st.markdown(
+    f"### {snapshot['Név']} ({snapshot['Ticker']})"
+)
+
+
+# Első sor
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric(
+        "Aktuális ár",
+        f"${snapshot['Ár']:.2f}",
+        f"{snapshot['Napi változás %']:.2f}%"
+    )
+
+with col2:
+
+    market_cap = snapshot["Market Cap"]
+
+    if market_cap:
+        market_cap_trillion = market_cap / 1_000_000_000_000
+
+        st.metric(
+            "Market Cap",
+            f"${market_cap_trillion:.2f}T"
+        )
+    else:
+        st.metric(
+            "Market Cap",
+            "N/A"
+        )
+
+with col3:
+
+    pe = snapshot["P/E"]
+
+    st.metric(
+        "P/E",
+        f"{pe:.2f}x" if pe else "N/A"
+    )
+
+
+# Második sor
+
+col4, col5, col6 = st.columns(3)
+
+with col4:
+    st.metric(
+        "52 hetes maximum",
+        f"${snapshot['52W High']:.2f}"
+    )
+
+with col5:
+    st.metric(
+        "52 hetes minimum",
+        f"${snapshot['52W Low']:.2f}"
+    )
+
+with col6:
+
+    hozam_30d = snapshot["30D hozam %"]
+
+    st.metric(
+        "30 napos hozam",
+        f"{hozam_30d:.2f}%"
+        if hozam_30d is not None
+        else "N/A"
     )
