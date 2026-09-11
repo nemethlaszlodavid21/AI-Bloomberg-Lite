@@ -13,6 +13,7 @@ from portfolio_performance_engine import teljesitmeny_szamitas
 from market_data import arak_lekerese
 from ai_analyst import portfolio_ai_elemzes
 from watchlist import watchlist_lekerese
+from watchlist_history import watchlist_tortenet
 
 # Cím
 
@@ -214,16 +215,115 @@ for uzenet in ai_elemzes:
 
 st.subheader("👀 Market Watchlist")
 
-watchlist = watchlist_lekerese()
 
-oszlopok = st.columns(len(watchlist))
+# Alap watchlist létrehozása
 
-for oszlop, adat in zip(oszlopok, watchlist):
+if "watchlist_tickerek" not in st.session_state:
+    st.session_state.watchlist_tickerek = [
+        "NVDA",
+        "AAPL",
+        "MSFT",
+        "TSLA",
+        "AMD",
+        "META"
+    ]
 
-    with oszlop:
 
-        st.metric(
-            label=adat["Ticker"],
-            value=f"{adat['Ár']:.2f}",
-            delta=f"{adat['Napi változás %']:.2f}%"
+# Watchlist kezelés
+
+with st.expander("⚙️ Watchlist kezelése"):
+
+    uj_ticker = st.text_input(
+        "Új ticker hozzáadása",
+        placeholder="Pl. GOOGL"
+    )
+
+    col_add, col_remove = st.columns(2)
+
+    with col_add:
+
+        if st.button("➕ Hozzáadás"):
+
+            ticker = uj_ticker.strip().upper()
+
+            if ticker and ticker not in st.session_state.watchlist_tickerek:
+
+                st.session_state.watchlist_tickerek.append(ticker)
+
+                st.success(
+                    f"{ticker} hozzáadva a Watchlisthez."
+                )
+
+    with col_remove:
+
+        eltavolitando = st.selectbox(
+            "Eltávolítandó ticker",
+            st.session_state.watchlist_tickerek
         )
+
+        if st.button("🗑️ Eltávolítás"):
+
+            if eltavolitando in st.session_state.watchlist_tickerek:
+
+                st.session_state.watchlist_tickerek.remove(
+                    eltavolitando
+                )
+
+                st.rerun()
+
+
+# Élő Watchlist adatok
+
+watchlist = watchlist_lekerese(
+    st.session_state.watchlist_tickerek
+)
+
+
+# KPI kártyák
+
+if watchlist:
+
+    oszlopok = st.columns(len(watchlist))
+
+    for oszlop, adat in zip(oszlopok, watchlist):
+
+        with oszlop:
+
+            st.metric(
+                label=adat["Ticker"],
+                 value=f"${adat['Ár']:.2f}",
+                 delta=f"{adat['Napi változás %']:.2f}%"
+)
+
+
+# Árfolyamgrafikon
+
+st.subheader("📈 Watchlist árfolyamgrafikon")
+
+tickerek = [
+    adat["Ticker"]
+    for adat in watchlist
+]
+
+if tickerek:
+
+    kivalasztott_ticker = st.selectbox(
+        "Válassz egy részvényt:",
+        tickerek
+    )
+
+    torteneti_adatok = watchlist_tortenet(
+        kivalasztott_ticker
+    )
+
+    fig_watchlist = px.line(
+        torteneti_adatok,
+        x="Dátum",
+        y="Ár",
+        title=f"{kivalasztott_ticker} - 30 napos árfolyam"
+    )
+
+    st.plotly_chart(
+        fig_watchlist,
+        use_container_width=True
+    )

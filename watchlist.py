@@ -1,16 +1,20 @@
 import yfinance as yf
 
 
-def watchlist_lekerese():
+ALAP_WATCHLIST = [
+    "NVDA",
+    "AAPL",
+    "MSFT",
+    "TSLA",
+    "AMD",
+    "META"
+]
 
-    tickerek = [
-        "NVDA",
-        "AAPL",
-        "MSFT",
-        "TSLA",
-        "AMD",
-        "META"
-    ]
+
+def watchlist_lekerese(tickerek=None):
+
+    if tickerek is None:
+        tickerek = ALAP_WATCHLIST
 
     eredmeny = []
 
@@ -42,11 +46,9 @@ def watchlist_lekerese():
             ) * 100
 
             eredmeny.append({
-
                 "Ticker": ticker,
                 "Ár": aktualis,
                 "Napi változás %": valtozas
-
             })
 
         except Exception:
