@@ -73,7 +73,7 @@ legnagyobb = portfolio.loc[
 
 
 # ---------------------------------------------------
-# PORTFOLIO EXPOSURE
+# PORTFÓLIÓ KITETTSÉG
 # ---------------------------------------------------
 
 (
@@ -126,9 +126,7 @@ hozam = (
 # PERFORMANCE DISPLAY
 # ---------------------------------------------------
 
-performance_display = (
-    performance.copy()
-)
+performance_display = performance.copy()
 
 penz_oszlopok = [
     "Bekerülési érték",
@@ -153,10 +151,23 @@ for oszlop in penz_oszlopok:
 # RISK SCORE
 # ---------------------------------------------------
 
-score, szint, uzenetek = (
-    risk_score_szamitas(
-        portfolio
-    )
+score, szint, uzenetek = risk_score_szamitas(
+    portfolio
+)
+
+
+# ---------------------------------------------------
+# KÖZÖS DASHBOARD ADATOK
+# ---------------------------------------------------
+
+market_adatok = market_overview_lekerese()
+
+tortenet = portfolio_tortenet(
+    portfolio
+)
+
+napi_adatok = portfolio_napi_teljesitmeny(
+    portfolio
 )
 
 
@@ -180,7 +191,8 @@ if "watchlist_tickerek" not in st.session_state:
 # TABOK
 # ---------------------------------------------------
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab0, tab1, tab2, tab3, tab4 = st.tabs([
+    "🏠 Kezdőlap",
     "💼 Portfólió",
     "👀 Piac",
     "🔎 Részvényelemzés",
@@ -189,7 +201,464 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 
 # ===================================================
-# TAB 1 — PORTFOLIO
+# TAB 0 — KEZDŐLAP
+# ===================================================
+
+with tab0:
+
+    st.subheader(
+        "🏠 Vezetői áttekintés"
+    )
+
+    st.caption(
+        "A portfólió, a piac és a kockázatok gyors összefoglalója"
+    )
+
+
+    # ------------------------------------------------
+    # FŐ KPI-K
+    # ------------------------------------------------
+
+    home1, home2, home3, home4 = st.columns(4)
+
+
+    with home1:
+
+        st.metric(
+            "💰 Portfólió érték",
+            f"{teljes_ertek / 1_000_000:.2f} M Ft"
+        )
+
+
+    with home2:
+
+        st.metric(
+            "📈 Teljes hozam",
+            f"{hozam:+.2f}%"
+        )
+
+
+    with home3:
+
+        st.metric(
+            "🧠 Risk Score",
+            f"{score}/100"
+        )
+
+
+    with home4:
+
+        st.metric(
+            "⚠️ Legnagyobb pozíció",
+            legnagyobb["Eszköz"],
+            f"{legnagyobb['Súly %']:.1f}%"
+        )
+
+
+    st.divider()
+
+
+    # ------------------------------------------------
+    # PIACI PILLANATKÉP
+    # ------------------------------------------------
+
+    st.subheader(
+        "🌎 Piaci pillanatkép"
+    )
+
+
+    if market_adatok:
+
+        market_home_cols = st.columns(
+            len(market_adatok)
+        )
+
+
+        for col, adat in zip(
+            market_home_cols,
+            market_adatok
+        ):
+
+            with col:
+
+                ertek = adat[
+                    "Érték"
+                ]
+
+                tipus = adat[
+                    "Típus"
+                ]
+
+
+                if tipus == "yield":
+
+                    megjelenitett_ertek = (
+                        f"{ertek:.2f}%"
+                    )
+
+
+                elif tipus == "vix":
+
+                    megjelenitett_ertek = (
+                        f"{ertek:.2f}"
+                    )
+
+
+                elif tipus == "index":
+
+                    megjelenitett_ertek = (
+                        f"{ertek:,.2f} pts"
+                    )
+
+
+                elif adat["Név"] == "Bitcoin":
+
+                    megjelenitett_ertek = (
+                        f"${ertek:,.0f}"
+                    )
+
+
+                elif adat["Név"] == "Gold":
+
+                    megjelenitett_ertek = (
+                        f"${ertek:,.0f}"
+                    )
+
+
+                else:
+
+                    megjelenitett_ertek = (
+                        f"{ertek:,.2f}"
+                    )
+
+
+                st.metric(
+                    adat["Név"],
+                    megjelenitett_ertek,
+                    f"{adat['Napi változás %']:+.2f}%"
+                )
+
+
+    else:
+
+        st.warning(
+            "A piaci adatok jelenleg nem érhetők el."
+        )
+
+
+    st.divider()
+
+
+    # ------------------------------------------------
+    # BENCHMARK + PORTFÓLIÓ ÁLLAPOT
+    # ------------------------------------------------
+
+    dashboard_left, dashboard_right = st.columns(
+        [2, 1]
+    )
+
+
+    # ------------------------------------------------
+    # 3 HAVI TELJESÍTMÉNY
+    # ------------------------------------------------
+
+    with dashboard_left:
+
+        st.subheader(
+            "📈 3 havi teljesítmény"
+        )
+
+        st.caption(
+            "Portfólió vs S&P 500 vs Nasdaq 100 • HUF • Kezd = 100"
+        )
+
+
+        home_benchmark = benchmark_osszehasonlitas(
+            tortenet,
+            "3M"
+        )
+
+
+        home_returns = benchmark_hozamok(
+            home_benchmark
+        )
+
+
+        if not home_benchmark.empty:
+
+            fig_home = go.Figure()
+
+
+            if "Portfolio" in home_benchmark.columns:
+
+                fig_home.add_trace(
+                    go.Scatter(
+                        x=home_benchmark.index,
+                        y=home_benchmark["Portfolio"],
+                        mode="lines",
+                        name="Portfólió",
+                        line=dict(
+                            width=3.5,
+                            color="#2563eb"
+                        )
+                    )
+                )
+
+
+            if "S&P 500" in home_benchmark.columns:
+
+                fig_home.add_trace(
+                    go.Scatter(
+                        x=home_benchmark.index,
+                        y=home_benchmark["S&P 500"],
+                        mode="lines",
+                        name="S&P 500",
+                        line=dict(
+                            width=2,
+                            color="#6b7280"
+                        )
+                    )
+                )
+
+
+            if "Nasdaq 100" in home_benchmark.columns:
+
+                fig_home.add_trace(
+                    go.Scatter(
+                        x=home_benchmark.index,
+                        y=home_benchmark["Nasdaq 100"],
+                        mode="lines",
+                        name="Nasdaq 100",
+                        line=dict(
+                            width=2,
+                            color="#14b8a6"
+                        )
+                    )
+                )
+
+
+            fig_home.add_hline(
+                y=100,
+                line_width=1,
+                line_dash="dot",
+                line_color="#9ca3af"
+            )
+
+
+            fig_home.update_layout(
+                paper_bgcolor="#ffffff",
+                plot_bgcolor="#ffffff",
+                font=dict(
+                    color="#374151"
+                ),
+                margin=dict(
+                    l=10,
+                    r=10,
+                    t=10,
+                    b=10
+                ),
+                height=330,
+                hovermode="x unified",
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="left",
+                    x=0
+                ),
+                xaxis=dict(
+                    title="",
+                    showgrid=False,
+                    zeroline=False
+                ),
+                yaxis=dict(
+                    title="",
+                    gridcolor="#f0f2f5",
+                    zeroline=False
+                )
+            )
+
+
+            st.plotly_chart(
+                fig_home,
+                width="stretch"
+            )
+
+
+            portfolio_3m = home_returns.get(
+                "Portfolio"
+            )
+
+            sp500_3m = home_returns.get(
+                "S&P 500"
+            )
+
+            nasdaq_3m = home_returns.get(
+                "Nasdaq 100"
+            )
+
+
+            perf_col1, perf_col2, perf_col3 = st.columns(3)
+
+
+            with perf_col1:
+
+                st.metric(
+                    "Portfólió",
+                    (
+                        f"{portfolio_3m:+.2f}%"
+                        if portfolio_3m is not None
+                        else "N/A"
+                    )
+                )
+
+
+            with perf_col2:
+
+                st.metric(
+                    "S&P 500",
+                    (
+                        f"{sp500_3m:+.2f}%"
+                        if sp500_3m is not None
+                        else "N/A"
+                    )
+                )
+
+
+            with perf_col3:
+
+                st.metric(
+                    "Nasdaq 100",
+                    (
+                        f"{nasdaq_3m:+.2f}%"
+                        if nasdaq_3m is not None
+                        else "N/A"
+                    )
+                )
+
+
+        else:
+
+            st.warning(
+                "A benchmark adatok jelenleg nem érhetők el."
+            )
+
+
+    # ------------------------------------------------
+    # PORTFÓLIÓ ÁLLAPOT
+    # ------------------------------------------------
+
+    with dashboard_right:
+
+        st.subheader(
+            "🧠 Portfólió állapot"
+        )
+
+
+        st.metric(
+            "Pozíciók",
+            f"{len(portfolio)} db"
+        )
+
+
+        st.metric(
+            "Devizák",
+            f"{portfolio['Deviza'].nunique()} db"
+        )
+
+
+        st.metric(
+            "Legnagyobb súly",
+            f"{legnagyobb['Súly %']:.1f}%"
+        )
+
+
+        st.metric(
+            "Risk Score",
+            f"{score}/100"
+        )
+
+
+        st.markdown(
+            "#### Értékelés"
+        )
+
+        st.write(
+            szint
+        )
+
+
+        if legnagyobb["Súly %"] > 40:
+
+            st.warning(
+                f"Magas koncentráció: "
+                f"{legnagyobb['Eszköz']} "
+                f"({legnagyobb['Súly %']:.1f}%)"
+            )
+
+        else:
+
+            st.success(
+                "A portfólió koncentrációja megfelelő."
+            )
+
+
+    st.divider()
+
+
+    # ------------------------------------------------
+    # KITETTSÉG ÖSSZEFOGLALÓ
+    # ------------------------------------------------
+
+    st.subheader(
+        "🧩 Kitettség összefoglaló"
+    )
+
+
+    exposure1, exposure2, exposure3 = st.columns(3)
+
+
+    if not theme_exposure.empty:
+
+        top_theme = theme_exposure.iloc[0]
+
+        with exposure1:
+
+            st.metric(
+                "Legnagyobb szektor",
+                top_theme["Theme"],
+                f"{top_theme['Súly %']:.1f}%"
+            )
+
+
+    if not currency_exposure.empty:
+
+        top_currency = currency_exposure.iloc[0]
+
+        with exposure2:
+
+            st.metric(
+                "Legnagyobb deviza",
+                top_currency["Deviza"],
+                f"{top_currency['Súly %']:.1f}%"
+            )
+
+
+    if not asset_class_exposure.empty:
+
+        top_asset = asset_class_exposure.iloc[0]
+
+        with exposure3:
+
+            st.metric(
+                "Legnagyobb eszközosztály",
+                top_asset["Asset Class"],
+                f"{top_asset['Súly %']:.1f}%"
+            )
+
+
+# ===================================================
+# TAB 1 — PORTFÓLIÓ
 # ===================================================
 
 with tab1:
@@ -203,9 +672,8 @@ with tab1:
     # KPI
     # ------------------------------------------------
 
-    col1, col2, col3, col4 = (
-        st.columns(4)
-    )
+    col1, col2, col3, col4 = st.columns(4)
+
 
     with col1:
 
@@ -214,6 +682,7 @@ with tab1:
             f"{teljes_ertek / 1_000_000:.2f} M Ft"
         )
 
+
     with col2:
 
         st.metric(
@@ -221,12 +690,14 @@ with tab1:
             f"{len(portfolio)} db"
         )
 
+
     with col3:
 
         st.metric(
             "🌍 Devizák",
             f"{portfolio['Deviza'].nunique()} db"
         )
+
 
     with col4:
 
@@ -243,10 +714,8 @@ with tab1:
     # FŐ DASHBOARD
     # ------------------------------------------------
 
-    left_col, right_col = (
-        st.columns(
-            [1, 1]
-        )
+    left_col, right_col = st.columns(
+        [1, 1]
     )
 
 
@@ -312,10 +781,8 @@ with tab1:
             "📈 Portfólió vs Benchmark"
         )
 
-        header_col1, header_col2 = (
-            st.columns(
-                [3, 1]
-            )
+        header_col1, header_col2 = st.columns(
+            [3, 1]
         )
 
 
@@ -341,42 +808,27 @@ with tab1:
             )
 
 
-        tortenet = portfolio_tortenet(
-            portfolio
+        benchmark_adatok = benchmark_osszehasonlitas(
+            tortenet,
+            idotav
         )
 
 
-        benchmark_adatok = (
-            benchmark_osszehasonlitas(
-                tortenet,
-                idotav
-            )
+        benchmark_returns = benchmark_hozamok(
+            benchmark_adatok
         )
 
 
-        benchmark_returns = (
-            benchmark_hozamok(
-                benchmark_adatok
-            )
+        portfolio_return = benchmark_returns.get(
+            "Portfolio"
         )
 
-
-        portfolio_return = (
-            benchmark_returns.get(
-                "Portfolio"
-            )
+        sp500_return = benchmark_returns.get(
+            "S&P 500"
         )
 
-        sp500_return = (
-            benchmark_returns.get(
-                "S&P 500"
-            )
-        )
-
-        nasdaq_return = (
-            benchmark_returns.get(
-                "Nasdaq 100"
-            )
+        nasdaq_return = benchmark_returns.get(
+            "Nasdaq 100"
         )
 
 
@@ -384,9 +836,7 @@ with tab1:
         # BENCHMARK KPI
         # --------------------------------------------
 
-        bench1, bench2, bench3 = (
-            st.columns(3)
-        )
+        bench1, bench2, bench3 = st.columns(3)
 
 
         with bench1:
@@ -464,17 +914,12 @@ with tab1:
             fig_benchmark = go.Figure()
 
 
-            if (
-                "Portfolio"
-                in benchmark_adatok.columns
-            ):
+            if "Portfolio" in benchmark_adatok.columns:
 
                 fig_benchmark.add_trace(
                     go.Scatter(
                         x=benchmark_adatok.index,
-                        y=benchmark_adatok[
-                            "Portfolio"
-                        ],
+                        y=benchmark_adatok["Portfolio"],
                         mode="lines",
                         name="Portfolio",
                         line=dict(
@@ -491,17 +936,12 @@ with tab1:
                 )
 
 
-            if (
-                "S&P 500"
-                in benchmark_adatok.columns
-            ):
+            if "S&P 500" in benchmark_adatok.columns:
 
                 fig_benchmark.add_trace(
                     go.Scatter(
                         x=benchmark_adatok.index,
-                        y=benchmark_adatok[
-                            "S&P 500"
-                        ],
+                        y=benchmark_adatok["S&P 500"],
                         mode="lines",
                         name="S&P 500",
                         line=dict(
@@ -518,17 +958,12 @@ with tab1:
                 )
 
 
-            if (
-                "Nasdaq 100"
-                in benchmark_adatok.columns
-            ):
+            if "Nasdaq 100" in benchmark_adatok.columns:
 
                 fig_benchmark.add_trace(
                     go.Scatter(
                         x=benchmark_adatok.index,
-                        y=benchmark_adatok[
-                            "Nasdaq 100"
-                        ],
+                        y=benchmark_adatok["Nasdaq 100"],
                         mode="lines",
                         name="Nasdaq 100",
                         line=dict(
@@ -554,26 +989,19 @@ with tab1:
 
 
             fig_benchmark.update_layout(
-
                 paper_bgcolor="#ffffff",
-
                 plot_bgcolor="#ffffff",
-
                 font=dict(
                     color="#374151"
                 ),
-
                 margin=dict(
                     l=10,
                     r=10,
                     t=15,
                     b=10
                 ),
-
                 height=370,
-
                 hovermode="x unified",
-
                 legend=dict(
                     orientation="h",
                     yanchor="bottom",
@@ -581,13 +1009,11 @@ with tab1:
                     xanchor="left",
                     x=0
                 ),
-
                 xaxis=dict(
                     title="",
                     showgrid=False,
                     zeroline=False
                 ),
-
                 yaxis=dict(
                     title="Indexed performance",
                     gridcolor="#f0f2f5",
@@ -637,9 +1063,9 @@ with tab1:
             "🧠 Kockázat Áttekintés"
         )
 
-        risk_col1, risk_col2 = (
-            st.columns(2)
-        )
+
+        risk_col1, risk_col2 = st.columns(2)
+
 
         with risk_col1:
 
@@ -648,6 +1074,7 @@ with tab1:
                 f"{score}/100"
             )
 
+
         with risk_col2:
 
             st.metric(
@@ -655,9 +1082,11 @@ with tab1:
                 f"{legnagyobb['Súly %']:.2f}%"
             )
 
+
         st.write(
             szint
         )
+
 
         for u in uzenetek:
 
@@ -682,9 +1111,7 @@ with tab1:
     )
 
 
-    exp1, exp2, exp3 = (
-        st.columns(3)
-    )
+    exp1, exp2, exp3 = st.columns(3)
 
 
     with exp1:
@@ -718,9 +1145,8 @@ with tab1:
             width="stretch"
         )
 
-        for _, sor in (
-            theme_exposure.iterrows()
-        ):
+
+        for _, sor in theme_exposure.iterrows():
 
             st.write(
                 f"**{sor['Theme']}** "
@@ -759,9 +1185,8 @@ with tab1:
             width="stretch"
         )
 
-        for _, sor in (
-            currency_exposure.iterrows()
-        ):
+
+        for _, sor in currency_exposure.iterrows():
 
             st.write(
                 f"**{sor['Deviza']}** "
@@ -800,9 +1225,8 @@ with tab1:
             width="stretch"
         )
 
-        for _, sor in (
-            asset_class_exposure.iterrows()
-        ):
+
+        for _, sor in asset_class_exposure.iterrows():
 
             st.write(
                 f"**{sor['Asset Class']}** "
@@ -821,15 +1245,11 @@ with tab1:
         "📈 Mai piaci teljesítmény"
     )
 
-    napi_adatok = (
-        portfolio_napi_teljesitmeny(
-            portfolio
-        )
-    )
 
     cols = st.columns(
         len(napi_adatok)
     )
+
 
     for col, adat in zip(
         cols,
@@ -860,6 +1280,7 @@ with tab1:
             f"({legnagyobb['Súly %']:.2f}%)"
         )
 
+
     else:
 
         st.success(
@@ -883,9 +1304,7 @@ with tab1:
     )
 
 
-    perf1, perf2, perf3, perf4 = (
-        st.columns(4)
-    )
+    perf1, perf2, perf3, perf4 = st.columns(4)
 
 
     with perf1:
@@ -936,7 +1355,7 @@ with tab1:
 
 
 # ===================================================
-# TAB 2 — MARKETS
+# TAB 2 — PIAC
 # ===================================================
 
 with tab2:
@@ -946,12 +1365,7 @@ with tab2:
     )
 
     st.caption(
-        "Részek • Volatilitás • Kamatok • Nyersanyagok • Kripto"
-    )
-
-
-    market_adatok = (
-        market_overview_lekerese()
+        "Részvények • Volatilitás • Kamatok • Nyersanyagok • Kripto"
     )
 
 
@@ -960,6 +1374,7 @@ with tab2:
         market_cols = st.columns(
             len(market_adatok)
         )
+
 
         for col, adat in zip(
             market_cols,
@@ -1022,16 +1437,14 @@ with tab2:
                 st.metric(
                     adat["Név"],
                     megjelenitett_ertek,
-                    (
-                        f"{adat['Napi változás %']:.2f}%"
-                    )
+                    f"{adat['Napi változás %']:.2f}%"
                 )
 
 
     else:
 
         st.warning(
-            "A Market Overview adatok jelenleg nem érhetők el."
+            "A piaci adatok jelenleg nem érhetők el."
         )
 
 
@@ -1056,9 +1469,8 @@ with tab2:
             placeholder="Pl. GOOGL"
         )
 
-        col_add, col_remove = (
-            st.columns(2)
-        )
+
+        col_add, col_remove = st.columns(2)
 
 
         with col_add:
@@ -1072,6 +1484,7 @@ with tab2:
                     .strip()
                     .upper()
                 )
+
 
                 if (
                     ticker
@@ -1090,12 +1503,11 @@ with tab2:
 
             if st.session_state.watchlist_tickerek:
 
-                eltavolitando = (
-                    st.selectbox(
-                        "Eltávolítandó ticker",
-                        st.session_state.watchlist_tickerek
-                    )
+                eltavolitando = st.selectbox(
+                    "Eltávolítandó ticker",
+                    st.session_state.watchlist_tickerek
                 )
+
 
                 if st.button(
                     "🗑️ Eltávolítás"
@@ -1118,6 +1530,7 @@ with tab2:
         oszlopok = st.columns(
             len(watchlist)
         )
+
 
         for oszlop, adat in zip(
             oszlopok,
@@ -1144,6 +1557,7 @@ with tab2:
         "📈 Price Chart"
     )
 
+
     tickerek = [
         adat["Ticker"]
         for adat in watchlist
@@ -1152,22 +1566,19 @@ with tab2:
 
     if tickerek:
 
-        kivalasztott_ticker = (
-            st.selectbox(
-                "Válassz egy részvényt:",
-                tickerek
-            )
+        kivalasztott_ticker = st.selectbox(
+            "Válassz egy részvényt:",
+            tickerek
         )
+
 
         st.session_state[
             "kivalasztott_ticker"
         ] = kivalasztott_ticker
 
 
-        torteneti_adatok = (
-            watchlist_tortenet(
-                kivalasztott_ticker
-            )
+        torteneti_adatok = watchlist_tortenet(
+            kivalasztott_ticker
         )
 
 
@@ -1215,7 +1626,7 @@ with tab2:
 
 
 # ===================================================
-# TAB 3 — EQUITY RESEARCH
+# TAB 3 — RÉSZVÉNYELEMZÉS
 # ===================================================
 
 with tab3:
@@ -1225,11 +1636,9 @@ with tab3:
     )
 
 
-    elemzett_ticker = (
-        st.session_state.get(
-            "kivalasztott_ticker",
-            "AAPL"
-        )
+    elemzett_ticker = st.session_state.get(
+        "kivalasztott_ticker",
+        "AAPL"
     )
 
 
@@ -1251,9 +1660,8 @@ with tab3:
         "### Market Overview"
     )
 
-    col1, col2, col3, col4 = (
-        st.columns(4)
-    )
+
+    col1, col2, col3, col4 = st.columns(4)
 
 
     with col1:
@@ -1271,12 +1679,10 @@ with tab3:
             "Market Cap"
         ]
 
+
         if market_cap:
 
-            if (
-                market_cap
-                >= 1_000_000_000_000
-            ):
+            if market_cap >= 1_000_000_000_000:
 
                 market_cap_text = (
                     f"${market_cap / 1_000_000_000_000:.2f}T"
@@ -1287,6 +1693,7 @@ with tab3:
                 market_cap_text = (
                     f"${market_cap / 1_000_000_000:.2f}B"
                 )
+
 
         else:
 
@@ -1332,9 +1739,8 @@ with tab3:
         "### 📊 Valuation"
     )
 
-    val1, val2, val3, val4 = (
-        st.columns(4)
-    )
+
+    val1, val2, val3, val4 = st.columns(4)
 
 
     with val1:
@@ -1401,9 +1807,7 @@ with tab3:
         )
 
 
-    val5, val6, val7 = (
-        st.columns(3)
-    )
+    val5, val6, val7 = st.columns(3)
 
 
     with val5:
@@ -1468,9 +1872,8 @@ with tab3:
         "### 📈 Price Range"
     )
 
-    range1, range2 = (
-        st.columns(2)
-    )
+
+    range1, range2 = st.columns(2)
 
 
     with range1:
@@ -1506,7 +1909,7 @@ with tab3:
 
 
 # ===================================================
-# TAB 4 — INTELLIGENCE
+# TAB 4 — AI ASSZISZTENS
 # ===================================================
 
 with tab4:
@@ -1515,11 +1918,13 @@ with tab4:
         "🤖 AI Portfolio Analyst"
     )
 
+
     ai_elemzes = portfolio_ai_elemzes(
         portfolio,
         performance,
         score
     )
+
 
     for uzenet in ai_elemzes:
 
