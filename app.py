@@ -1,5 +1,6 @@
 import streamlit as st
 import plotly.express as px
+import plotly.graph_objects as go
 
 from portfolio_import import portfolio_betoltes
 from portfolio_analysis import portfolio_elemzes
@@ -7,6 +8,12 @@ from portfolio_value import portfolio_ertek_szamitas
 from portfolio_performance import portfolio_napi_teljesitmeny
 from portfolio_risk import risk_score_szamitas
 from portfolio_history import portfolio_tortenet
+
+from portfolio_benchmark import (
+    benchmark_osszehasonlitas,
+    benchmark_hozamok
+)
+
 from portfolio_transactions import tranzakciok_betoltese
 from portfolio_positions import pozicio_osszesites
 from portfolio_performance_engine import teljesitmeny_szamitas
@@ -42,7 +49,7 @@ st.title(
 )
 
 st.caption(
-    "Portfolió elemzés • Piaci információk • Részvényelemzés"
+    "Portfólióelemzés • Piaci információk • Részvényelemzés"
 )
 
 
@@ -174,8 +181,8 @@ if "watchlist_tickerek" not in st.session_state:
 # ---------------------------------------------------
 
 tab1, tab2, tab3, tab4 = st.tabs([
-    "💼 Portfolió",
-    "👀 Piaci adatok",
+    "💼 Portfólió",
+    "👀 Piac",
     "🔎 Részvényelemzés",
     "🤖 AI Asszisztens"
 ])
@@ -188,7 +195,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
 
     st.subheader(
-        "Portfolió Áttekintés"
+        "Portfólió Áttekintés"
     )
 
 
@@ -302,54 +309,332 @@ with tab1:
     with right_col:
 
         st.subheader(
-            "📈 Portfólió történeti teljesítmény"
+            "📈 Portfólió vs Benchmark"
         )
+
+        header_col1, header_col2 = (
+            st.columns(
+                [3, 1]
+            )
+        )
+
+
+        with header_col1:
+
+            st.caption(
+                "Normalizált teljesítmény • HUF • Kezd = 100"
+            )
+
+
+        with header_col2:
+
+            idotav = st.selectbox(
+                "Időtáv",
+                [
+                    "1M",
+                    "3M",
+                    "6M",
+                    "1Y"
+                ],
+                index=3,
+                label_visibility="collapsed"
+            )
+
 
         tortenet = portfolio_tortenet(
             portfolio
         )
 
-        fig_portfolio_history = px.line(
-            tortenet,
-            x=tortenet.index,
-            y="Portfolio"
-        )
 
-        fig_portfolio_history.update_layout(
-            paper_bgcolor="#ffffff",
-            plot_bgcolor="#ffffff",
-            font_color="#1f2937",
-            margin=dict(
-                l=10,
-                r=10,
-                t=20,
-                b=10
-            ),
-            xaxis=dict(
-                title="",
-                showgrid=False
-            ),
-            yaxis=dict(
-                title="",
-                gridcolor="#e5e7eb"
-            ),
-            showlegend=False
-        )
-
-        fig_portfolio_history.update_traces(
-            line=dict(
-                width=3
+        benchmark_adatok = (
+            benchmark_osszehasonlitas(
+                tortenet,
+                idotav
             )
         )
 
-        st.plotly_chart(
-            fig_portfolio_history,
-            width="stretch"
+
+        benchmark_returns = (
+            benchmark_hozamok(
+                benchmark_adatok
+            )
         )
 
 
+        portfolio_return = (
+            benchmark_returns.get(
+                "Portfolio"
+            )
+        )
+
+        sp500_return = (
+            benchmark_returns.get(
+                "S&P 500"
+            )
+        )
+
+        nasdaq_return = (
+            benchmark_returns.get(
+                "Nasdaq 100"
+            )
+        )
+
+
+        # --------------------------------------------
+        # BENCHMARK KPI
+        # --------------------------------------------
+
+        bench1, bench2, bench3 = (
+            st.columns(3)
+        )
+
+
+        with bench1:
+
+            if portfolio_return is not None:
+
+                delta_text = None
+
+                if sp500_return is not None:
+
+                    relative_sp = (
+                        portfolio_return
+                        - sp500_return
+                    )
+
+                    delta_text = (
+                        f"{relative_sp:+.2f} pp vs S&P"
+                    )
+
+
+                st.metric(
+                    "Portfolio",
+                    f"{portfolio_return:+.2f}%",
+                    delta=delta_text
+                )
+
+            else:
+
+                st.metric(
+                    "Portfolio",
+                    "N/A"
+                )
+
+
+        with bench2:
+
+            if sp500_return is not None:
+
+                st.metric(
+                    "S&P 500",
+                    f"{sp500_return:+.2f}%"
+                )
+
+            else:
+
+                st.metric(
+                    "S&P 500",
+                    "N/A"
+                )
+
+
+        with bench3:
+
+            if nasdaq_return is not None:
+
+                st.metric(
+                    "Nasdaq 100",
+                    f"{nasdaq_return:+.2f}%"
+                )
+
+            else:
+
+                st.metric(
+                    "Nasdaq 100",
+                    "N/A"
+                )
+
+
+        # --------------------------------------------
+        # BENCHMARK CHART
+        # --------------------------------------------
+
+        if not benchmark_adatok.empty:
+
+            fig_benchmark = go.Figure()
+
+
+            if (
+                "Portfolio"
+                in benchmark_adatok.columns
+            ):
+
+                fig_benchmark.add_trace(
+                    go.Scatter(
+                        x=benchmark_adatok.index,
+                        y=benchmark_adatok[
+                            "Portfolio"
+                        ],
+                        mode="lines",
+                        name="Portfolio",
+                        line=dict(
+                            width=3.5,
+                            color="#2563eb"
+                        ),
+                        hovertemplate=(
+                            "<b>Portfolio</b><br>"
+                            "%{x|%d %b %Y}<br>"
+                            "Index: %{y:.2f}"
+                            "<extra></extra>"
+                        )
+                    )
+                )
+
+
+            if (
+                "S&P 500"
+                in benchmark_adatok.columns
+            ):
+
+                fig_benchmark.add_trace(
+                    go.Scatter(
+                        x=benchmark_adatok.index,
+                        y=benchmark_adatok[
+                            "S&P 500"
+                        ],
+                        mode="lines",
+                        name="S&P 500",
+                        line=dict(
+                            width=2,
+                            color="#6b7280"
+                        ),
+                        hovertemplate=(
+                            "<b>S&P 500</b><br>"
+                            "%{x|%d %b %Y}<br>"
+                            "Index: %{y:.2f}"
+                            "<extra></extra>"
+                        )
+                    )
+                )
+
+
+            if (
+                "Nasdaq 100"
+                in benchmark_adatok.columns
+            ):
+
+                fig_benchmark.add_trace(
+                    go.Scatter(
+                        x=benchmark_adatok.index,
+                        y=benchmark_adatok[
+                            "Nasdaq 100"
+                        ],
+                        mode="lines",
+                        name="Nasdaq 100",
+                        line=dict(
+                            width=2,
+                            color="#14b8a6"
+                        ),
+                        hovertemplate=(
+                            "<b>Nasdaq 100</b><br>"
+                            "%{x|%d %b %Y}<br>"
+                            "Index: %{y:.2f}"
+                            "<extra></extra>"
+                        )
+                    )
+                )
+
+
+            fig_benchmark.add_hline(
+                y=100,
+                line_width=1,
+                line_dash="dot",
+                line_color="#9ca3af"
+            )
+
+
+            fig_benchmark.update_layout(
+
+                paper_bgcolor="#ffffff",
+
+                plot_bgcolor="#ffffff",
+
+                font=dict(
+                    color="#374151"
+                ),
+
+                margin=dict(
+                    l=10,
+                    r=10,
+                    t=15,
+                    b=10
+                ),
+
+                height=370,
+
+                hovermode="x unified",
+
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="left",
+                    x=0
+                ),
+
+                xaxis=dict(
+                    title="",
+                    showgrid=False,
+                    zeroline=False
+                ),
+
+                yaxis=dict(
+                    title="Indexed performance",
+                    gridcolor="#f0f2f5",
+                    zeroline=False
+                )
+            )
+
+
+            st.plotly_chart(
+                fig_benchmark,
+                width="stretch"
+            )
+
+
+            if (
+                portfolio_return is not None
+                and sp500_return is not None
+                and nasdaq_return is not None
+            ):
+
+                relative_sp = (
+                    portfolio_return
+                    - sp500_return
+                )
+
+                relative_nasdaq = (
+                    portfolio_return
+                    - nasdaq_return
+                )
+
+
+                st.caption(
+                    f"Relative performance • "
+                    f"S&P 500: {relative_sp:+.2f} pp • "
+                    f"Nasdaq 100: {relative_nasdaq:+.2f} pp"
+                )
+
+
+        else:
+
+            st.warning(
+                "A benchmark adatok jelenleg nem érhetők el."
+            )
+
+
         st.subheader(
-            "🧠 Risk Overview"
+            "🧠 Kockázat Áttekintés"
         )
 
         risk_col1, risk_col2 = (
@@ -385,11 +670,11 @@ with tab1:
 
 
     # =================================================
-    # PORTFOLIó ÖSSZETÉTEL
+    # PORTFÓLIÓ KITETTSÉG
     # =================================================
 
     st.subheader(
-        "🧩 Portfolió Összetétel"
+        "🧩 Portfólió Kitettség"
     )
 
     st.caption(
@@ -402,14 +687,10 @@ with tab1:
     )
 
 
-    # ------------------------------------------------
-    # SZEKTOR MEGOSZLÁS
-    # ------------------------------------------------
-
     with exp1:
 
         st.markdown(
-            "#### Szektor Megoszlás"
+            "#### Szektor megoszlás"
         )
 
         fig_theme = px.pie(
@@ -447,14 +728,10 @@ with tab1:
             )
 
 
-    # ------------------------------------------------
-    # DEVIZA MEGOSZLÁS
-    # ------------------------------------------------
-
     with exp2:
 
         st.markdown(
-            "#### Deviza Megoszlás"
+            "#### Deviza megoszlás"
         )
 
         fig_currency = px.pie(
@@ -492,14 +769,10 @@ with tab1:
             )
 
 
-    # ------------------------------------------------
-    # ESZKÖZ OSZTÁLY MEGOSZLÁS
-    # ------------------------------------------------
-
     with exp3:
 
         st.markdown(
-            "#### Eszközosztály Megoszlás"
+            "#### Eszközallokáció"
         )
 
         fig_asset = px.pie(
@@ -598,7 +871,7 @@ with tab1:
 
 
     # =================================================
-    # PORTFOLIÓ TELJESÍTMÉNY
+    # PORTFÓLIÓ TELJESÍTMÉNY
     # =================================================
 
     st.subheader(
@@ -618,7 +891,7 @@ with tab1:
     with perf1:
 
         st.metric(
-            "Befektetett összeg",
+            "Befektetett tőke",
             f"${befektetett:,.2f}"
         )
 
@@ -626,7 +899,7 @@ with tab1:
     with perf2:
 
         st.metric(
-            "Jelenlegi Érték",
+            "Aktuális érték",
             f"${aktualis:,.2f}"
         )
 
@@ -653,7 +926,7 @@ with tab1:
 
 
     st.markdown(
-        "#### Position Performance"
+        "#### Pozíció Teljesítmény"
     )
 
     st.dataframe(
@@ -668,16 +941,12 @@ with tab1:
 
 with tab2:
 
-    # ------------------------------------------------
-    # MARKET OVERVIEW
-    # ------------------------------------------------
-
     st.subheader(
-        "🌎 Market Overview"
+        "🌎 Piaci áttekintés"
     )
 
     st.caption(
-        "Equities • Volatility • Rates • Commodities • Crypto"
+        "Részek • Volatilitás • Kamatok • Nyersanyagok • Kripto"
     )
 
 
@@ -969,10 +1238,6 @@ with tab3:
     )
 
 
-    # ------------------------------------------------
-    # COMPANY HEADER
-    # ------------------------------------------------
-
     st.markdown(
         f"## {snapshot['Név']}"
     )
@@ -981,10 +1246,6 @@ with tab3:
         snapshot["Ticker"]
     )
 
-
-    # ------------------------------------------------
-    # MARKET OVERVIEW
-    # ------------------------------------------------
 
     st.markdown(
         "### Market Overview"
@@ -1066,10 +1327,6 @@ with tab3:
 
     st.divider()
 
-
-    # ------------------------------------------------
-    # VALUATION
-    # ------------------------------------------------
 
     st.markdown(
         "### 📊 Valuation"
@@ -1206,10 +1463,6 @@ with tab3:
 
     st.divider()
 
-
-    # ------------------------------------------------
-    # PRICE RANGE
-    # ------------------------------------------------
 
     st.markdown(
         "### 📈 Price Range"
