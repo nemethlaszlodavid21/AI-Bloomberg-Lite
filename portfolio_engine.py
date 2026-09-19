@@ -1,5 +1,10 @@
 import pandas as pd
 
+from fx_data import (
+    aktualis_huf_arfolyam,
+    historikus_huf_arfolyam
+)
+
 
 # ===================================================
 # POZÍCIÓK KISZÁMÍTÁSA
@@ -16,7 +21,9 @@ def poziciok_szamitas_db(
         "Deviza",
         "Átlagár",
         "Bekerülési érték",
-        "Realizált P/L"
+        "Bekerülési érték HUF",
+        "Realizált P/L",
+        "Realizált P/L HUF"
     ]
 
 
@@ -49,6 +56,39 @@ def poziciok_szamitas_db(
 
 
     # ===================================================
+    # FX CACHE
+    # ===================================================
+
+    fx_cache = {}
+
+
+    def tranzakcios_fx(
+        deviza,
+        datum
+    ):
+
+        kulcs = (
+            str(deviza).upper(),
+            str(datum)
+        )
+
+
+        if kulcs not in fx_cache:
+
+            fx_cache[
+                kulcs
+            ] = historikus_huf_arfolyam(
+                deviza,
+                datum
+            )
+
+
+        return fx_cache[
+            kulcs
+        ]
+
+
+    # ===================================================
     # TRANZAKCIÓK FELDOLGOZÁSA
     # ===================================================
 
@@ -74,6 +114,11 @@ def poziciok_szamitas_db(
         ).strip().upper()
 
 
+        trade_date = sor[
+            "trade_date"
+        ]
+
+
         quantity = float(
             sor["quantity"]
         )
@@ -86,6 +131,16 @@ def poziciok_szamitas_db(
 
         fee = float(
             sor["fee"]
+        )
+
+
+        # -----------------------------------------------
+        # TRANZAKCIÓ NAPI FX
+        # -----------------------------------------------
+
+        fx = tranzakcios_fx(
+            deviza,
+            trade_date
         )
 
 
@@ -117,7 +172,13 @@ def poziciok_szamitas_db(
                 "Bekerülési érték":
                     0.0,
 
+                "Bekerülési érték HUF":
+                    0.0,
+
                 "Realizált P/L":
+                    0.0,
+
+                "Realizált P/L HUF":
                     0.0
             }
 
@@ -166,11 +227,25 @@ def poziciok_szamitas_db(
             )
 
 
+            teljes_uj_koltseg_huf = (
+                teljes_uj_koltseg
+                * fx
+            )
+
+
             uj_bekerules = (
                 pozicio[
                     "Bekerülési érték"
                 ]
                 + teljes_uj_koltseg
+            )
+
+
+            uj_bekerules_huf = (
+                pozicio[
+                    "Bekerülési érték HUF"
+                ]
+                + teljes_uj_koltseg_huf
             )
 
 
@@ -190,6 +265,11 @@ def poziciok_szamitas_db(
             pozicio[
                 "Bekerülési érték"
             ] = uj_bekerules
+
+
+            pozicio[
+                "Bekerülési érték HUF"
+            ] = uj_bekerules_huf
 
 
             if uj_darab > 0:
@@ -230,18 +310,52 @@ def poziciok_szamitas_db(
                 )
 
 
+            if jelenlegi_darab <= 0:
+
+                raise ValueError(
+                    f"{ticker}: nincs eladható pozíció."
+                )
+
+
+            # -----------------------------------------------
+            # ÁTLAGOS BEKERÜLÉSI ÉRTÉK / DB
+            # -----------------------------------------------
+
             atlagar = (
                 pozicio[
-                    "Átlagár"
+                    "Bekerülési érték"
                 ]
+                / jelenlegi_darab
             )
 
+
+            atlagos_huf_bekerules_db = (
+                pozicio[
+                    "Bekerülési érték HUF"
+                ]
+                / jelenlegi_darab
+            )
+
+
+            # -----------------------------------------------
+            # ELADOTT RÉSZ COST BASIS
+            # -----------------------------------------------
 
             eladott_bekerules = (
                 atlagar
                 * quantity
             )
 
+
+            eladott_bekerules_huf = (
+                atlagos_huf_bekerules_db
+                * quantity
+            )
+
+
+            # -----------------------------------------------
+            # ELADÁSI BEVÉTEL
+            # -----------------------------------------------
 
             brutto_bevetel = (
                 quantity
@@ -255,9 +369,25 @@ def poziciok_szamitas_db(
             )
 
 
+            netto_bevetel_huf = (
+                netto_bevetel
+                * fx
+            )
+
+
+            # -----------------------------------------------
+            # REALIZÁLT P/L
+            # -----------------------------------------------
+
             realizalt_profit = (
                 netto_bevetel
                 - eladott_bekerules
+            )
+
+
+            realizalt_profit_huf = (
+                netto_bevetel_huf
+                - eladott_bekerules_huf
             )
 
 
@@ -267,6 +397,15 @@ def poziciok_szamitas_db(
 
 
             pozicio[
+                "Realizált P/L HUF"
+            ] += realizalt_profit_huf
+
+
+            # -----------------------------------------------
+            # MARADÓ POZÍCIÓ
+            # -----------------------------------------------
+
+            pozicio[
                 "Darab"
             ] -= quantity
 
@@ -274,6 +413,11 @@ def poziciok_szamitas_db(
             pozicio[
                 "Bekerülési érték"
             ] -= eladott_bekerules
+
+
+            pozicio[
+                "Bekerülési érték HUF"
+            ] -= eladott_bekerules_huf
 
 
             # -----------------------------------------------
@@ -297,8 +441,27 @@ def poziciok_szamitas_db(
 
 
                 pozicio[
+                    "Bekerülési érték HUF"
+                ] = 0.0
+
+
+                pozicio[
                     "Átlagár"
                 ] = 0.0
+
+
+            else:
+
+                pozicio[
+                    "Átlagár"
+                ] = (
+                    pozicio[
+                        "Bekerülési érték"
+                    ]
+                    / pozicio[
+                        "Darab"
+                    ]
+                )
 
 
         else:
@@ -385,11 +548,16 @@ def performance_szamitas_db(
         "Deviza",
         "Átlagár",
         "Bekerülési érték",
+        "Bekerülési érték HUF",
         "Aktuális érték",
+        "Aktuális érték HUF",
         "Profit",
         "Profit %",
         "Hozam %",
-        "Realizált P/L"
+        "Nem realizált P/L HUF",
+        "Hozam HUF %",
+        "Realizált P/L",
+        "Realizált P/L HUF"
     ]
 
 
@@ -403,6 +571,36 @@ def performance_szamitas_db(
         )
 
 
+    # ===================================================
+    # AKTUÁLIS FX CACHE
+    # ===================================================
+
+    fx_cache = {}
+
+
+    def aktualis_fx(
+        deviza
+    ):
+
+        deviza = str(
+            deviza
+        ).strip().upper()
+
+
+        if deviza not in fx_cache:
+
+            fx_cache[
+                deviza
+            ] = aktualis_huf_arfolyam(
+                deviza
+            )
+
+
+        return fx_cache[
+            deviza
+        ]
+
+
     sorok = []
 
 
@@ -411,6 +609,13 @@ def performance_szamitas_db(
         ticker = sor[
             "Ticker"
         ]
+
+
+        deviza = str(
+            sor[
+                "Deviza"
+            ]
+        ).strip().upper()
 
 
         price = aktualis_arok.get(
@@ -425,9 +630,30 @@ def performance_szamitas_db(
         )
 
 
+        bekerules_huf = float(
+            sor[
+                "Bekerülési érték HUF"
+            ]
+        )
+
+
         darab = float(
             sor[
                 "Darab"
+            ]
+        )
+
+
+        realizalt_pl = float(
+            sor[
+                "Realizált P/L"
+            ]
+        )
+
+
+        realizalt_pl_huf = float(
+            sor[
+                "Realizált P/L HUF"
             ]
         )
 
@@ -440,9 +666,15 @@ def performance_szamitas_db(
 
             aktualis_ertek = None
 
+            aktualis_ertek_huf = None
+
             profit = None
 
             profit_percent = None
+
+            profit_huf = None
+
+            profit_huf_percent = None
 
 
         # -----------------------------------------------
@@ -451,13 +683,31 @@ def performance_szamitas_db(
 
         else:
 
-            aktualis_ertek = (
-                darab
-                * float(
-                    price
-                )
+            price = float(
+                price
             )
 
+
+            fx = aktualis_fx(
+                deviza
+            )
+
+
+            aktualis_ertek = (
+                darab
+                * price
+            )
+
+
+            aktualis_ertek_huf = (
+                aktualis_ertek
+                * fx
+            )
+
+
+            # -------------------------------------------
+            # NATÍV DEVIZÁS P/L
+            # -------------------------------------------
 
             profit = (
                 aktualis_ertek
@@ -478,6 +728,29 @@ def performance_szamitas_db(
                 profit_percent = None
 
 
+            # -------------------------------------------
+            # HUF P/L
+            # -------------------------------------------
+
+            profit_huf = (
+                aktualis_ertek_huf
+                - bekerules_huf
+            )
+
+
+            if bekerules_huf != 0:
+
+                profit_huf_percent = (
+                    profit_huf
+                    / bekerules_huf
+                    * 100
+                )
+
+            else:
+
+                profit_huf_percent = None
+
+
         sorok.append(
             {
 
@@ -493,9 +766,7 @@ def performance_szamitas_db(
                     darab,
 
                 "Deviza":
-                    sor[
-                        "Deviza"
-                    ],
+                    deviza,
 
                 "Átlagár":
                     float(
@@ -507,8 +778,14 @@ def performance_szamitas_db(
                 "Bekerülési érték":
                     bekerules,
 
+                "Bekerülési érték HUF":
+                    bekerules_huf,
+
                 "Aktuális érték":
                     aktualis_ertek,
+
+                "Aktuális érték HUF":
+                    aktualis_ertek_huf,
 
                 "Profit":
                     profit,
@@ -516,17 +793,25 @@ def performance_szamitas_db(
                 "Profit %":
                     profit_percent,
 
-                # FONTOS:
-                # ai_analyst.py ezt az oszlopot várja.
+                # ---------------------------------------
+                # VISSZAFELÉ KOMPATIBILITÁS
+                # ai_analyst.py ezt várja.
+                # ---------------------------------------
+
                 "Hozam %":
                     profit_percent,
 
+                "Nem realizált P/L HUF":
+                    profit_huf,
+
+                "Hozam HUF %":
+                    profit_huf_percent,
+
                 "Realizált P/L":
-                    float(
-                        sor[
-                            "Realizált P/L"
-                        ]
-                    )
+                    realizalt_pl,
+
+                "Realizált P/L HUF":
+                    realizalt_pl_huf
             }
         )
 

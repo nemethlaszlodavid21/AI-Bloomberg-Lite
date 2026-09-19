@@ -385,9 +385,14 @@ else:
 
 if not performance.empty:
 
+    # A teljesítmény KPI-k egységesen HUF-ban számolódnak.
+    # A bekerülési érték a tranzakció napjához tartozó historikus
+    # devizaárfolyamot, az aktuális érték pedig a jelenlegi
+    # devizaárfolyamot használja.
+
     befektetett = (
         performance[
-            "Bekerülési érték"
+            "Bekerülési érték HUF"
         ]
         .fillna(0)
         .sum()
@@ -396,7 +401,7 @@ if not performance.empty:
 
     aktualis = (
         performance[
-            "Aktuális érték"
+            "Aktuális érték HUF"
         ]
         .fillna(0)
         .sum()
@@ -405,16 +410,7 @@ if not performance.empty:
 
     profit = (
         performance[
-            "Profit"
-        ]
-        .fillna(0)
-        .sum()
-    )
-
-
-    realizalt_profit = (
-        performance[
-            "Realizált P/L"
+            "Nem realizált P/L HUF"
         ]
         .fillna(0)
         .sum()
@@ -428,8 +424,6 @@ else:
     aktualis = 0.0
 
     profit = 0.0
-
-    realizalt_profit = 0.0
 
 
 if befektetett != 0:
@@ -1236,11 +1230,15 @@ with tab1:
 
                 price_input = (
                     st.number_input(
-                        "Ár",
+                        "1 db vételi/eladási ára",
                         min_value=0.0,
                         value=0.0,
                         step=1.0,
-                        format="%.4f"
+                        format="%.4f",
+                        help=(
+                            "Az ár mindig egyetlen darab ára "
+                            "a kiválasztott devizában."
+                        )
                     )
                 )
 
@@ -1268,6 +1266,69 @@ with tab1:
                         format="%.4f"
                     )
                 )
+
+
+            tranzakcio_ertek = (
+                quantity_input
+                * price_input
+            )
+
+
+            if side_input == "BUY":
+
+                teljes_tranzakcio_ertek = (
+                    tranzakcio_ertek
+                    + fee_input
+                )
+
+            else:
+
+                teljes_tranzakcio_ertek = (
+                    tranzakcio_ertek
+                    - fee_input
+                )
+
+
+            st.markdown(
+                "#### Tranzakció összesítése"
+            )
+
+
+            osszeg_col1, osszeg_col2 = (
+                st.columns(2)
+            )
+
+
+            with osszeg_col1:
+
+                st.metric(
+                    "Tranzakció értéke",
+                    f"{tranzakcio_ertek:,.2f} {currency_input}"
+                )
+
+
+            with osszeg_col2:
+
+                if side_input == "BUY":
+
+                    st.metric(
+                        "Teljes bekerülési érték",
+                        f"{teljes_tranzakcio_ertek:,.2f} {currency_input}"
+                    )
+
+                else:
+
+                    st.metric(
+                        "Nettó eladási érték",
+                        f"{teljes_tranzakcio_ertek:,.2f} {currency_input}"
+                    )
+
+
+            st.caption(
+                "Tranzakció értéke = darabszám × 1 db ára. "
+                "BUY esetén a teljes bekerülési érték a "
+                "tranzakciós díjat is tartalmazza."
+            )
 
 
             note_input = (
@@ -1314,10 +1375,17 @@ with tab1:
                 )
 
 
+            elif quantity_input <= 0:
+
+                st.error(
+                    "A darabszámnak 0-nál nagyobbnak kell lennie."
+                )
+
+
             elif price_input <= 0:
 
                 st.error(
-                    "Az árnak 0-nál nagyobbnak kell lennie."
+                    "Az 1 db-ra jutó árnak 0-nál nagyobbnak kell lennie."
                 )
 
 
@@ -2394,7 +2462,7 @@ with tab1:
 
             st.metric(
                 "Befektetett tőke",
-                f"{befektetett:,.2f}"
+                f"{befektetett:,.0f} Ft"
             )
 
 
@@ -2402,7 +2470,7 @@ with tab1:
 
             st.metric(
                 "Aktuális érték",
-                f"{aktualis:,.2f}"
+                f"{aktualis:,.0f} Ft"
             )
 
 
@@ -2410,7 +2478,7 @@ with tab1:
 
             st.metric(
                 "Nem realizált P/L",
-                f"{profit:+,.2f}"
+                f"{profit:+,.0f} Ft"
             )
 
 
@@ -2422,9 +2490,11 @@ with tab1:
             )
 
 
-        st.metric(
-            "Realizált P/L",
-            f"{realizalt_profit:+,.2f}"
+        st.caption(
+            "A teljesítmény HUF-alapon számolódik: a bekerülési érték "
+            "a tranzakciók historikus devizaárfolyamát, az aktuális érték "
+            "pedig a jelenlegi devizaárfolyamot használja. A realizált P/L "
+            "külön tranzakció-alapú számítása a következő fejlesztési lépés."
         )
 
 
