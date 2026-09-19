@@ -52,8 +52,15 @@ from portfolio_database import (
     tranzakcio_hozzaadas,
     tranzakciok_betoltese_db,
     tranzakcio_torles,
+    tranzakciok_importalasa_db,
     cash_betoltes_db,
     cash_mentes_db
+)
+
+from ibkr_import import (
+    ibkr_csv_ellenorzes,
+    ibkr_tranzakciok_feldolgozasa,
+    ibkr_import_osszefoglalo
 )
 
 from portfolio_engine import (
@@ -1508,6 +1515,281 @@ with tab1:
                         f"A tranzakció nem menthető: {e}"
                     )
 
+    # =================================================
+    # INTERACTIVE BROKERS IMPORT
+    # =================================================
+
+    with st.expander(
+        "📥 Interactive Brokers CSV import",
+        expanded=False
+    ):
+
+        st.markdown(
+            "### Interactive Brokers tranzakciók importálása"
+        )
+
+        st.caption(
+            "Tölts fel egy Interactive Brokers Activity Statement "
+            "CSV-fájlt. A feltöltés önmagában nem módosítja a "
+            "portfóliódat."
+        )
+
+        ibkr_fajl = st.file_uploader(
+            "IBKR CSV kiválasztása",
+            type=["csv"],
+            key="ibkr_csv_upload"
+        )
+
+        if ibkr_fajl is not None:
+
+            if not ibkr_csv_ellenorzes(
+                ibkr_fajl
+            ):
+
+                st.error(
+                    "A feltöltött fájl nem felismerhető "
+                    "Interactive Brokers Activity Statementként."
+                )
+
+            else:
+
+                try:
+
+                    ibkr_tranzakciok = (
+                        ibkr_tranzakciok_feldolgozasa(
+                            ibkr_fajl
+                        )
+                    )
+
+                    if ibkr_tranzakciok.empty:
+
+                        st.warning(
+                            "A fájl felismerhető IBKR kimutatás, "
+                            "de nem találtam importálható "
+                            "értékpapír-tranzakciót."
+                        )
+
+                    else:
+
+                        osszefoglalo = (
+                            ibkr_import_osszefoglalo(
+                                ibkr_tranzakciok
+                            )
+                        )
+
+                        st.success(
+                            "Interactive Brokers fájl sikeresen felismerve."
+                        )
+
+                        # -----------------------------------------
+                        # IMPORT ÖSSZEFOGLALÓ
+                        # -----------------------------------------
+
+                        col1, col2, col3, col4 = (
+                            st.columns(4)
+                        )
+
+                        with col1:
+
+                            st.metric(
+                                "Tranzakciók",
+                                osszefoglalo[
+                                    "tranzakciok_szama"
+                                ]
+                            )
+
+                        with col2:
+
+                            st.metric(
+                                "BUY",
+                                osszefoglalo[
+                                    "buy_db"
+                                ]
+                            )
+
+                        with col3:
+
+                            st.metric(
+                                "SELL",
+                                osszefoglalo[
+                                    "sell_db"
+                                ]
+                            )
+
+                        with col4:
+
+                            st.metric(
+                                "Eszközök",
+                                osszefoglalo[
+                                    "ticker_db"
+                                ]
+                            )
+
+                        st.caption(
+                            "Időszak: "
+                            f"{osszefoglalo['kezdo_datum']} – "
+                            f"{osszefoglalo['veg_datum']} | "
+                            "Devizák: "
+                            + ", ".join(
+                                osszefoglalo[
+                                    "devizak"
+                                ]
+                            )
+                        )
+
+                        # -----------------------------------------
+                        # ELŐNÉZET
+                        # -----------------------------------------
+
+                        st.markdown(
+                            "#### Import előnézet"
+                        )
+
+                        elonezet = (
+                            ibkr_tranzakciok[
+                                [
+                                    "datum",
+                                    "ticker",
+                                    "tipus",
+                                    "mennyiseg",
+                                    "ar",
+                                    "deviza",
+                                    "jutalek"
+                                ]
+                            ]
+                            .copy()
+                        )
+
+                        elonezet = (
+                            elonezet.rename(
+                                columns={
+                                    "datum":
+                                        "Dátum",
+
+                                    "ticker":
+                                        "Ticker",
+
+                                    "tipus":
+                                        "Típus",
+
+                                    "mennyiseg":
+                                        "Darabszám",
+
+                                    "ar":
+                                        "1 db ára",
+
+                                    "deviza":
+                                        "Deviza",
+
+                                    "jutalek":
+                                        "Díj"
+                                }
+                            )
+                        )
+
+                        st.dataframe(
+                            elonezet,
+                            width="stretch",
+                            hide_index=True
+                        )
+
+                        st.info(
+                            "A tranzakciók még nincsenek elmentve. "
+                            "Az adatbázis csak az alábbi gomb "
+                            "megnyomásakor módosul."
+                        )
+
+                        # -----------------------------------------
+                        # IMPORTÁLÁS
+                        # -----------------------------------------
+
+                        if st.button(
+                            "📥 Tranzakciók importálása",
+                            type="primary",
+                            key="ibkr_import_button"
+                        ):
+
+                            eredmeny = (
+                                tranzakciok_importalasa_db(
+                                    ibkr_tranzakciok
+                                )
+                            )
+
+                            # -------------------------------------
+                            # TELJES PORTFÓLIÓ VALIDÁLÁSA
+                            # -------------------------------------
+
+                            aktualis_tranzakciok = (
+                                tranzakciok_betoltese_db()
+                            )
+
+                            try:
+
+                                poziciok_szamitas_db(
+                                    aktualis_tranzakciok
+                                )
+
+                            except Exception as e:
+
+                                st.error(
+                                    "Az import után a tranzakciós "
+                                    "előzmény ellenőrzése hibát jelzett: "
+                                    f"{e}"
+                                )
+
+                            # -------------------------------------
+                            # EREDMÉNY
+                            # -------------------------------------
+
+                            st.success(
+                                f"{eredmeny['importalt']} tranzakció "
+                                "sikeresen importálva."
+                            )
+
+                            if (
+                                eredmeny[
+                                    "duplikalt"
+                                ] > 0
+                            ):
+
+                                st.info(
+                                    f"{eredmeny['duplikalt']} már "
+                                    "létező tranzakció kihagyva."
+                                )
+
+                            if (
+                                eredmeny[
+                                    "hibas"
+                                ] > 0
+                            ):
+
+                                st.warning(
+                                    f"{eredmeny['hibas']} tranzakció "
+                                    "nem volt importálható."
+                                )
+
+                                with st.expander(
+                                    "Importálási hibák"
+                                ):
+
+                                    for hiba in (
+                                        eredmeny[
+                                            "hibak"
+                                        ]
+                                    ):
+
+                                        st.write(
+                                            f"• {hiba}"
+                                        )
+
+                            st.rerun()
+
+                except Exception as e:
+
+                    st.error(
+                        "Az IBKR CSV feldolgozása "
+                        f"nem sikerült: {e}"
+                    )
 
     # =================================================
     # TRANZAKCIÓS NAPLÓ

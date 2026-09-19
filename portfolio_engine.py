@@ -5,6 +5,10 @@ from fx_data import (
     historikus_huf_arfolyam
 )
 
+from corporate_actions import (
+    ticker_corporate_actions
+)
+
 
 # ===================================================
 # POZÍCIÓK KISZÁMÍTÁSA
@@ -26,7 +30,6 @@ def poziciok_szamitas_db(
         "Realizált P/L HUF"
     ]
 
-
     if (
         tranzakciok is None
         or tranzakciok.empty
@@ -36,31 +39,48 @@ def poziciok_szamitas_db(
             columns=oszlopok
         )
 
+    # ===================================================
+    # RENDEZÉS
+    # ===================================================
+
+    tx = tranzakciok.copy()
+
+    tx["trade_date"] = pd.to_datetime(
+        tx["trade_date"]
+    )
+
+    rendezes = [
+        "trade_date"
+    ]
+
+    if "trade_datetime" in tx.columns:
+        rendezes.append(
+            "trade_datetime"
+        )
+
+    if "id" in tx.columns:
+        rendezes.append(
+            "id"
+        )
 
     tx = (
-        tranzakciok
-        .copy()
+        tx
         .sort_values(
-            [
-                "trade_date",
-                "id"
-            ]
+            rendezes,
+            na_position="last"
         )
         .reset_index(
             drop=True
         )
     )
 
-
     poziciok = {}
-
 
     # ===================================================
     # FX CACHE
     # ===================================================
 
     fx_cache = {}
-
 
     def tranzakcios_fx(
         deviza,
@@ -72,7 +92,6 @@ def poziciok_szamitas_db(
             str(datum)
         )
 
-
         if kulcs not in fx_cache:
 
             fx_cache[
@@ -82,11 +101,110 @@ def poziciok_szamitas_db(
                 datum
             )
 
-
         return fx_cache[
             kulcs
         ]
 
+    # ===================================================
+    # CORPORATE ACTION SEGÉDFÜGGVÉNY
+    # ===================================================
+
+    def corporate_actions_alkalmazasa(
+        ticker,
+        pozicio,
+        elozo_datum,
+        aktualis_datum
+    ):
+
+        actions = ticker_corporate_actions(
+            ticker
+        )
+
+        if actions.empty:
+            return
+
+        elozo_datum = pd.Timestamp(
+            elozo_datum
+        )
+
+        aktualis_datum = pd.Timestamp(
+            aktualis_datum
+        )
+
+        relevant_actions = actions[
+            (actions["date"] > elozo_datum)
+            &
+            (actions["date"] <= aktualis_datum)
+        ]
+
+        for _, action in (
+            relevant_actions.iterrows()
+        ):
+
+            action_type = str(
+                action["type"]
+            ).strip().upper()
+
+            if action_type != "SPLIT":
+                continue
+
+            ratio = float(
+                action["split_ratio"]
+            )
+
+            if ratio <= 0:
+                raise ValueError(
+                    f"{ticker}: hibás split ratio: "
+                    f"{ratio}"
+                )
+
+            # -----------------------------------------------
+            # SPLIT / REVERSE SPLIT
+            # -----------------------------------------------
+            #
+            # Darabszám változik.
+            #
+            # A teljes bekerülési érték NEM változik.
+            #
+            # Emiatt az átlagár automatikusan
+            # újraszámolható.
+            # -----------------------------------------------
+
+            pozicio[
+                "Darab"
+            ] *= ratio
+
+            if (
+                pozicio["Darab"]
+                > 1e-10
+            ):
+
+                pozicio[
+                    "Átlagár"
+                ] = (
+                    pozicio[
+                        "Bekerülési érték"
+                    ]
+                    / pozicio[
+                        "Darab"
+                    ]
+                )
+
+            else:
+
+                pozicio[
+                    "Darab"
+                ] = 0.0
+
+                pozicio[
+                    "Átlagár"
+                ] = 0.0
+
+    # ===================================================
+    # UTOLSÓ FELDOLGOZOTT DÁTUM TICKERENKÉNT
+    # ===================================================
+
+    utolso_datum = {}
 
     # ===================================================
     # TRANZAKCIÓK FELDOLGOZÁSA
@@ -98,41 +216,52 @@ def poziciok_szamitas_db(
             sor["ticker"]
         ).strip().upper()
 
-
         eszkoz = str(
             sor["asset_name"]
         ).strip()
-
 
         side = str(
             sor["side"]
         ).strip().upper()
 
-
         deviza = str(
             sor["currency"]
         ).strip().upper()
 
-
-        trade_date = sor[
-            "trade_date"
-        ]
-
+        trade_date = pd.Timestamp(
+            sor["trade_date"]
+        )
 
         quantity = float(
             sor["quantity"]
         )
 
-
         price = float(
             sor["price"]
         )
-
 
         fee = float(
             sor["fee"]
         )
 
+        # -----------------------------------------------
+        # FORRÁS
+        # -----------------------------------------------
+
+        source = str(
+            sor.get(
+                "source",
+                "MANUAL"
+            )
+        ).strip().upper()
+
+        if source in {
+            "",
+            "NONE",
+            "NAN"
+        }:
+
+            source = "MANUAL"
 
         # -----------------------------------------------
         # TRANZAKCIÓ NAPI FX
@@ -142,7 +271,6 @@ def poziciok_szamitas_db(
             deviza,
             trade_date
         )
-
 
         # -----------------------------------------------
         # ÚJ TICKER
@@ -182,11 +310,9 @@ def poziciok_szamitas_db(
                     0.0
             }
 
-
         pozicio = poziciok[
             ticker
         ]
-
 
         # -----------------------------------------------
         # DEVIZA ELLENŐRZÉS
@@ -203,11 +329,22 @@ def poziciok_szamitas_db(
                 f"({pozicio['Deviza']} és {deviza})."
             )
 
+        # ===================================================
+        # CORPORATE ACTION A KÉT TRANZAKCIÓ KÖZÖTT
+        # ===================================================
+
+        if ticker in utolso_datum:
+
+            corporate_actions_alkalmazasa(
+                ticker=ticker,
+                pozicio=pozicio,
+                elozo_datum=utolso_datum[ticker],
+                aktualis_datum=trade_date
+            )
 
         pozicio[
             "Eszköz"
         ] = eszkoz
-
 
         # ===================================================
         # BUY
@@ -220,18 +357,15 @@ def poziciok_szamitas_db(
                 * price
             )
 
-
             teljes_uj_koltseg = (
                 vetel_erteke
                 + fee
             )
 
-
             teljes_uj_koltseg_huf = (
                 teljes_uj_koltseg
                 * fx
             )
-
 
             uj_bekerules = (
                 pozicio[
@@ -240,14 +374,12 @@ def poziciok_szamitas_db(
                 + teljes_uj_koltseg
             )
 
-
             uj_bekerules_huf = (
                 pozicio[
                     "Bekerülési érték HUF"
                 ]
                 + teljes_uj_koltseg_huf
             )
-
 
             uj_darab = (
                 pozicio[
@@ -256,21 +388,17 @@ def poziciok_szamitas_db(
                 + quantity
             )
 
-
             pozicio[
                 "Darab"
             ] = uj_darab
-
 
             pozicio[
                 "Bekerülési érték"
             ] = uj_bekerules
 
-
             pozicio[
                 "Bekerülési érték HUF"
             ] = uj_bekerules_huf
-
 
             if uj_darab > 0:
 
@@ -281,19 +409,21 @@ def poziciok_szamitas_db(
                     / uj_darab
                 )
 
-
         # ===================================================
         # SELL
         # ===================================================
 
         elif side == "SELL":
 
-            jelenlegi_darab = (
+            jelenlegi_darab = float(
                 pozicio[
                     "Darab"
                 ]
             )
 
+            # ===================================================
+            # ELADOTT MENNYISÉG FELBONTÁSA
+            # ===================================================
 
             if (
                 quantity
@@ -301,154 +431,204 @@ def poziciok_szamitas_db(
                 + 1e-10
             ):
 
-                raise ValueError(
-                    f"{ticker}: az eladás "
-                    f"({quantity:g} db) nagyobb, "
-                    f"mint a rendelkezésre álló "
-                    f"pozíció "
-                    f"({jelenlegi_darab:g} db)."
+                if source in {
+                    "IBKR",
+                    "EXCEL"
+                }:
+
+                    ismert_eladott_darab = max(
+                        jelenlegi_darab,
+                        0.0
+                    )
+
+                    ismeretlen_eladott_darab = (
+                        quantity
+                        - ismert_eladott_darab
+                    )
+
+                else:
+
+                    raise ValueError(
+                        f"{ticker}: az eladás "
+                        f"({quantity:g} db) nagyobb, "
+                        f"mint a rendelkezésre álló "
+                        f"pozíció "
+                        f"({jelenlegi_darab:g} db)."
+                    )
+
+            else:
+
+                ismert_eladott_darab = quantity
+
+                ismeretlen_eladott_darab = 0.0
+
+            # ===================================================
+            # ISMERT COST BASISŰ RÉSZ
+            # ===================================================
+
+            if (
+                ismert_eladott_darab
+                > 1e-10
+            ):
+
+                if jelenlegi_darab <= 0:
+
+                    raise ValueError(
+                        f"{ticker}: nincs eladható "
+                        f"ismert pozíció."
+                    )
+
+                # -----------------------------------------------
+                # ÁTLAGOS BEKERÜLÉSI ÉRTÉK / DB
+                # -----------------------------------------------
+
+                atlagar = (
+                    pozicio[
+                        "Bekerülési érték"
+                    ]
+                    / jelenlegi_darab
                 )
 
-
-            if jelenlegi_darab <= 0:
-
-                raise ValueError(
-                    f"{ticker}: nincs eladható pozíció."
+                atlagos_huf_bekerules_db = (
+                    pozicio[
+                        "Bekerülési érték HUF"
+                    ]
+                    / jelenlegi_darab
                 )
 
+                # -----------------------------------------------
+                # ELADOTT RÉSZ COST BASIS
+                # -----------------------------------------------
 
-            # -----------------------------------------------
-            # ÁTLAGOS BEKERÜLÉSI ÉRTÉK / DB
-            # -----------------------------------------------
+                eladott_bekerules = (
+                    atlagar
+                    * ismert_eladott_darab
+                )
 
-            atlagar = (
+                eladott_bekerules_huf = (
+                    atlagos_huf_bekerules_db
+                    * ismert_eladott_darab
+                )
+
+                # -----------------------------------------------
+                # JUTALÉK ARÁNYOS RÉSZE
+                # -----------------------------------------------
+
+                if quantity > 0:
+
+                    ismert_fee = (
+                        fee
+                        * (
+                            ismert_eladott_darab
+                            / quantity
+                        )
+                    )
+
+                else:
+
+                    ismert_fee = 0.0
+
+                # -----------------------------------------------
+                # ELADÁSI BEVÉTEL
+                # -----------------------------------------------
+
+                brutto_bevetel = (
+                    ismert_eladott_darab
+                    * price
+                )
+
+                netto_bevetel = (
+                    brutto_bevetel
+                    - ismert_fee
+                )
+
+                netto_bevetel_huf = (
+                    netto_bevetel
+                    * fx
+                )
+
+                # -----------------------------------------------
+                # REALIZÁLT P/L
+                # -----------------------------------------------
+
+                realizalt_profit = (
+                    netto_bevetel
+                    - eladott_bekerules
+                )
+
+                realizalt_profit_huf = (
+                    netto_bevetel_huf
+                    - eladott_bekerules_huf
+                )
+
+                pozicio[
+                    "Realizált P/L"
+                ] += realizalt_profit
+
+                pozicio[
+                    "Realizált P/L HUF"
+                ] += realizalt_profit_huf
+
+                # -----------------------------------------------
+                # MARADÓ POZÍCIÓ
+                # -----------------------------------------------
+
+                pozicio[
+                    "Darab"
+                ] -= ismert_eladott_darab
+
                 pozicio[
                     "Bekerülési érték"
-                ]
-                / jelenlegi_darab
-            )
+                ] -= eladott_bekerules
 
-
-            atlagos_huf_bekerules_db = (
                 pozicio[
                     "Bekerülési érték HUF"
-                ]
-                / jelenlegi_darab
-            )
+                ] -= eladott_bekerules_huf
 
+            # ===================================================
+            # ISMERETLEN ELŐZMÉNYŰ RÉSZ
+            # ===================================================
+            #
+            # Importált részleges történetnél:
+            #
+            # - nem hozunk létre negatív pozíciót
+            # - nem találunk ki cost basist
+            # - nem számolunk kitalált realizált P/L-t
+            # ===================================================
 
-            # -----------------------------------------------
-            # ELADOTT RÉSZ COST BASIS
-            # -----------------------------------------------
+            if (
+                ismeretlen_eladott_darab
+                > 1e-10
+            ):
 
-            eladott_bekerules = (
-                atlagar
-                * quantity
-            )
+                pass
 
+            # ===================================================
+            # POZÍCIÓ NORMALIZÁLÁSA
+            # ===================================================
 
-            eladott_bekerules_huf = (
-                atlagos_huf_bekerules_db
-                * quantity
-            )
-
-
-            # -----------------------------------------------
-            # ELADÁSI BEVÉTEL
-            # -----------------------------------------------
-
-            brutto_bevetel = (
-                quantity
-                * price
-            )
-
-
-            netto_bevetel = (
-                brutto_bevetel
-                - fee
-            )
-
-
-            netto_bevetel_huf = (
-                netto_bevetel
-                * fx
-            )
-
-
-            # -----------------------------------------------
-            # REALIZÁLT P/L
-            # -----------------------------------------------
-
-            realizalt_profit = (
-                netto_bevetel
-                - eladott_bekerules
-            )
-
-
-            realizalt_profit_huf = (
-                netto_bevetel_huf
-                - eladott_bekerules_huf
-            )
-
-
-            pozicio[
-                "Realizált P/L"
-            ] += realizalt_profit
-
-
-            pozicio[
-                "Realizált P/L HUF"
-            ] += realizalt_profit_huf
-
-
-            # -----------------------------------------------
-            # MARADÓ POZÍCIÓ
-            # -----------------------------------------------
-
-            pozicio[
-                "Darab"
-            ] -= quantity
-
-
-            pozicio[
-                "Bekerülési érték"
-            ] -= eladott_bekerules
-
-
-            pozicio[
-                "Bekerülési érték HUF"
-            ] -= eladott_bekerules_huf
-
-
-            # -----------------------------------------------
-            # TELJESEN LEZÁRT POZÍCIÓ
-            # -----------------------------------------------
-
-            if abs(
+            if (
                 pozicio[
                     "Darab"
                 ]
-            ) < 1e-10:
+                < 1e-10
+            ):
 
                 pozicio[
                     "Darab"
                 ] = 0.0
 
-
                 pozicio[
                     "Bekerülési érték"
                 ] = 0.0
 
-
                 pozicio[
                     "Bekerülési érték HUF"
                 ] = 0.0
-
 
                 pozicio[
                     "Átlagár"
                 ] = 0.0
-
 
             else:
 
@@ -463,6 +643,9 @@ def poziciok_szamitas_db(
                     ]
                 )
 
+        # ===================================================
+        # ISMERETLEN TRANZAKCIÓTÍPUS
+        # ===================================================
 
         else:
 
@@ -471,6 +654,42 @@ def poziciok_szamitas_db(
                 f"{side}"
             )
 
+        # -----------------------------------------------
+        # UTOLSÓ TRANZAKCIÓ DÁTUMA
+        # -----------------------------------------------
+
+        utolso_datum[
+            ticker
+        ] = trade_date
+
+    # ===================================================
+    # UTOLSÓ TRANZAKCIÓ UTÁNI CORPORATE ACTIONÖK
+    # ===================================================
+    #
+    # Ez szükséges például az IMUX esetében:
+    #
+    # BUY:   2026-02-24
+    # SPLIT: 2026-04-27
+    #
+    # Ha nincs split után újabb tranzakció,
+    # akkor itt alkalmazzuk az eseményt.
+    # ===================================================
+
+    mai_datum = pd.Timestamp.now()
+
+    for ticker, pozicio in (
+        poziciok.items()
+    ):
+
+        if ticker not in utolso_datum:
+            continue
+
+        corporate_actions_alkalmazasa(
+            ticker=ticker,
+            pozicio=pozicio,
+            elozo_datum=utolso_datum[ticker],
+            aktualis_datum=mai_datum
+        )
 
     # ===================================================
     # CSAK AKTÍV POZÍCIÓK
@@ -487,7 +706,6 @@ def poziciok_szamitas_db(
             "Darab"
         ] > 1e-10
     ]
-
 
     return pd.DataFrame(
         aktiv,
@@ -509,7 +727,6 @@ def portfolio_adatframe_db(
         )
     )
 
-
     if poziciok.empty:
 
         return pd.DataFrame(
@@ -520,7 +737,6 @@ def portfolio_adatframe_db(
                 "Deviza"
             ]
         )
-
 
     return poziciok[
         [
@@ -560,7 +776,6 @@ def performance_szamitas_db(
         "Realizált P/L HUF"
     ]
 
-
     if (
         poziciok is None
         or poziciok.empty
@@ -570,13 +785,11 @@ def performance_szamitas_db(
             columns=oszlopok
         )
 
-
     # ===================================================
     # AKTUÁLIS FX CACHE
     # ===================================================
 
     fx_cache = {}
-
 
     def aktualis_fx(
         deviza
@@ -586,7 +799,6 @@ def performance_szamitas_db(
             deviza
         ).strip().upper()
 
-
         if deviza not in fx_cache:
 
             fx_cache[
@@ -595,14 +807,11 @@ def performance_szamitas_db(
                 deviza
             )
 
-
         return fx_cache[
             deviza
         ]
 
-
     sorok = []
-
 
     for _, sor in poziciok.iterrows():
 
@@ -610,18 +819,15 @@ def performance_szamitas_db(
             "Ticker"
         ]
 
-
         deviza = str(
             sor[
                 "Deviza"
             ]
         ).strip().upper()
 
-
         price = aktualis_arok.get(
             ticker
         )
-
 
         bekerules = float(
             sor[
@@ -629,13 +835,11 @@ def performance_szamitas_db(
             ]
         )
 
-
         bekerules_huf = float(
             sor[
                 "Bekerülési érték HUF"
             ]
         )
-
 
         darab = float(
             sor[
@@ -643,20 +847,17 @@ def performance_szamitas_db(
             ]
         )
 
-
         realizalt_pl = float(
             sor[
                 "Realizált P/L"
             ]
         )
 
-
         realizalt_pl_huf = float(
             sor[
                 "Realizált P/L HUF"
             ]
         )
-
 
         # -----------------------------------------------
         # NINCS AKTUÁLIS ÁR
@@ -665,17 +866,11 @@ def performance_szamitas_db(
         if price is None:
 
             aktualis_ertek = None
-
             aktualis_ertek_huf = None
-
             profit = None
-
             profit_percent = None
-
             profit_huf = None
-
             profit_huf_percent = None
-
 
         # -----------------------------------------------
         # VAN AKTUÁLIS ÁR
@@ -687,23 +882,19 @@ def performance_szamitas_db(
                 price
             )
 
-
             fx = aktualis_fx(
                 deviza
             )
-
 
             aktualis_ertek = (
                 darab
                 * price
             )
 
-
             aktualis_ertek_huf = (
                 aktualis_ertek
                 * fx
             )
-
 
             # -------------------------------------------
             # NATÍV DEVIZÁS P/L
@@ -713,7 +904,6 @@ def performance_szamitas_db(
                 aktualis_ertek
                 - bekerules
             )
-
 
             if bekerules != 0:
 
@@ -727,7 +917,6 @@ def performance_szamitas_db(
 
                 profit_percent = None
 
-
             # -------------------------------------------
             # HUF P/L
             # -------------------------------------------
@@ -736,7 +925,6 @@ def performance_szamitas_db(
                 aktualis_ertek_huf
                 - bekerules_huf
             )
-
 
             if bekerules_huf != 0:
 
@@ -749,7 +937,6 @@ def performance_szamitas_db(
             else:
 
                 profit_huf_percent = None
-
 
         sorok.append(
             {
@@ -814,7 +1001,6 @@ def performance_szamitas_db(
                     realizalt_pl_huf
             }
         )
-
 
     return pd.DataFrame(
         sorok,
