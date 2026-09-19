@@ -5,9 +5,28 @@ from pathlib import Path
 import pandas as pd
 
 
+# ===================================================
+# ADATBÁZIS HELYE
+# ===================================================
+
 DB_FILE = Path(__file__).with_name(
     "portfolio.db"
 )
+
+
+def adatbazis_fajl_beallitasa(
+    db_file
+):
+    """
+    Beállítja, hogy az aktuális felhasználói session
+    melyik SQLite adatbázist használja.
+    """
+
+    global DB_FILE
+
+    DB_FILE = Path(
+        db_file
+    )
 
 
 # ===================================================

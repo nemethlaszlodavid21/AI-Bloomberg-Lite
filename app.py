@@ -1,6 +1,10 @@
 import pandas as pd
 import streamlit as st
 
+import tempfile
+import uuid
+from pathlib import Path
+
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -48,6 +52,7 @@ from risk_analytics import (
 )
 
 from portfolio_database import (
+    adatbazis_fajl_beallitasa,
     adatbazis_init,
     tranzakcio_hozzaadas,
     tranzakciok_betoltese_db,
@@ -61,6 +66,11 @@ from ibkr_import import (
     ibkr_csv_ellenorzes,
     ibkr_tranzakciok_feldolgozasa,
     ibkr_import_osszefoglalo
+)
+
+from excel_import import (
+    excel_sablon_keszites,
+    excel_tranzakciok_feldolgozasa
 )
 
 from portfolio_engine import (
@@ -113,8 +123,50 @@ alkalmaz_style()
 
 
 # ===================================================
-# ADATBÁZIS
+# FELHASZNÁLÓI SESSION ADATBÁZIS
 # ===================================================
+
+if "portfolio_session_id" not in st.session_state:
+
+    st.session_state[
+        "portfolio_session_id"
+    ] = str(
+        uuid.uuid4()
+    )
+
+
+if "portfolio_db_file" not in st.session_state:
+
+    session_id = st.session_state[
+        "portfolio_session_id"
+    ]
+
+    db_dir = (
+        Path(
+            tempfile.gettempdir()
+        )
+        / "ai_bloomberg_lite"
+    )
+
+    db_dir.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    st.session_state[
+        "portfolio_db_file"
+    ] = str(
+        db_dir
+        / f"portfolio_{session_id}.db"
+    )
+
+
+adatbazis_fajl_beallitasa(
+    st.session_state[
+        "portfolio_db_file"
+    ]
+)
+
 
 adatbazis_init()
 
@@ -127,6 +179,30 @@ db_tranzakciok = (
 van_tranzakcio = (
     not db_tranzakciok.empty
 )
+
+
+# ===================================================
+# TRANZAKCIÓS DÍJAK
+# ===================================================
+
+if (
+    van_tranzakcio
+    and "fee" in db_tranzakciok.columns
+    and "currency" in db_tranzakciok.columns
+):
+
+    tranzakcios_dijak = (
+        db_tranzakciok
+        .groupby(
+            "currency"
+        )["fee"]
+        .sum()
+        .to_dict()
+    )
+
+else:
+
+    tranzakcios_dijak = {}
 
 
 # ===================================================
@@ -1792,6 +1868,180 @@ with tab1:
                     )
 
     # =================================================
+    # EXCEL IMPORT
+    # =================================================
+
+    with st.expander(
+        "📊 Excel sablon és import",
+        expanded=False
+    ):
+
+        st.markdown(
+            "### Excel tranzakciós sablon"
+        )
+
+        st.caption(
+            "Töltsd le a sablont, add meg a BUY és SELL "
+            "tranzakciókat, majd töltsd vissza a kitöltött fájlt."
+        )
+
+        excel_sablon = (
+            excel_sablon_keszites()
+        )
+
+        st.download_button(
+            label="⬇️ Excel sablon letöltése",
+            data=excel_sablon,
+            file_name="ai_bloomberg_lite_portfolio_sablon.xlsx",
+            mime=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+            key="excel_template_download"
+        )
+
+        st.divider()
+
+        excel_fajl = st.file_uploader(
+            "Kitöltött Excel feltöltése",
+            type=["xlsx"],
+            key="excel_portfolio_upload"
+        )
+
+        if excel_fajl is not None:
+
+            try:
+
+                excel_tranzakciok = (
+                    excel_tranzakciok_feldolgozasa(
+                        excel_fajl
+                    )
+                )
+
+                st.success(
+                    f"{len(excel_tranzakciok)} tranzakció "
+                    "sikeresen felismerve."
+                )
+
+                st.markdown(
+                    "#### Import előnézet"
+                )
+
+                excel_elonezet = (
+                    excel_tranzakciok[
+                        [
+                            "datum",
+                            "ticker",
+                            "eszkoz_nev",
+                            "tipus",
+                            "mennyiseg",
+                            "ar",
+                            "deviza",
+                            "jutalek"
+                        ]
+                    ]
+                    .copy()
+                )
+
+                excel_elonezet = (
+                    excel_elonezet.rename(
+                        columns={
+                            "datum": "Dátum",
+                            "ticker": "Ticker",
+                            "eszkoz_nev": "Eszköz",
+                            "tipus": "Típus",
+                            "mennyiseg": "Darabszám",
+                            "ar": "1 db ára",
+                            "deviza": "Deviza",
+                            "jutalek": "Díj"
+                        }
+                    )
+                )
+
+                st.dataframe(
+                    excel_elonezet,
+                    width="stretch",
+                    hide_index=True
+                )
+
+                st.info(
+                    "A feltöltés még nem módosította a portfóliót. "
+                    "Az adatok csak az importálás gomb megnyomása "
+                    "után kerülnek a tranzakciós naplóba."
+                )
+
+                if st.button(
+                    "📥 Excel tranzakciók importálása",
+                    type="primary",
+                    key="excel_import_button"
+                ):
+
+                    eredmeny = (
+                        tranzakciok_importalasa_db(
+                            excel_tranzakciok
+                        )
+                    )
+
+                    if eredmeny["hibas"] > 0:
+
+                        st.error(
+                            "Az Excel import nem hajtható végre."
+                        )
+
+                        with st.expander(
+                            "Importálási hibák"
+                        ):
+
+                            for hiba in eredmeny[
+                                "hibak"
+                            ]:
+
+                                st.write(
+                                    f"• {hiba}"
+                                )
+
+                    else:
+
+                        aktualis_tranzakciok = (
+                            tranzakciok_betoltese_db()
+                        )
+
+                        try:
+
+                            poziciok_szamitas_db(
+                                aktualis_tranzakciok
+                            )
+
+                            st.success(
+                                f"{eredmeny['importalt']} tranzakció "
+                                "sikeresen importálva."
+                            )
+
+                            if eredmeny[
+                                "duplikalt"
+                            ] > 0:
+
+                                st.info(
+                                    f"{eredmeny['duplikalt']} már "
+                                    "létező tranzakció kihagyva."
+                                )
+
+                            st.rerun()
+
+                        except Exception as e:
+
+                            st.error(
+                                "Az importált tranzakciós előzmény "
+                                f"nem érvényes: {e}"
+                            )
+
+            except Exception as e:
+
+                st.error(
+                    f"Az Excel-fájl feldolgozása nem sikerült: {e}"
+                )
+
+    # =================================================
     # TRANZAKCIÓS NAPLÓ
     # =================================================
 
@@ -2634,6 +2884,72 @@ with tab1:
 
 
         # =============================================
+        # RISK MUTATÓK MAGYARÁZATA
+        # =============================================
+
+        with st.expander(
+            "ℹ️ Mit jelentenek ezek a mutatók?"
+        ):
+
+            st.markdown(
+                """
+**Éves volatilitás**
+
+A portfólió napi hozamainak ingadozásából számított, évesített volatilitás.
+A magasabb érték nagyobb árfolyam-ingadozást jelez.
+
+---
+
+**Max Drawdown**
+
+A vizsgált időszak legnagyobb visszaesése egy korábbi csúcstól az azt követő mélypontig.
+Például **−20% Max Drawdown** azt jelenti, hogy a portfólió a vizsgált időszak valamely pontján 20%-kal került egy korábbi maximuma alá.
+
+---
+
+**Beta vs S&P 500**
+
+A portfólió S&P 500-hoz viszonyított piaci érzékenységét mutatja.
+
+- **Beta ≈ 1:** hasonló piaci érzékenység
+- **Beta > 1:** nagyobb érzékenység
+- **Beta < 1:** kisebb érzékenység
+- **Negatív Beta:** történelmileg ellentétes irányú kapcsolat
+
+---
+
+**Sharpe Ratio**
+
+A kockázatmentes hozam feletti teljesítményt viszonyítja a portfólió teljes volatilitásához.
+Magasabb érték történelmileg több többlethozamot jelentett egységnyi teljes volatilitás mellett.
+
+---
+
+**Sortino Ratio**
+
+A Sharpe Ratio-hoz hasonló mutató, de csak a negatív hozamingadozást bünteti.
+Ezért különösen hasznos annak vizsgálatára, hogy a portfólió mekkora hozamot ért el a lefelé irányuló kockázathoz képest.
+
+---
+
+**1 napos VaR 95%**
+
+Historikus becslés arra, hogy a vizsgált adatok alapján a napi eredmények körülbelül 5%-a volt rosszabb a megadott veszteségi küszöbnél.
+A VaR **nem maximális veszteség**, és nem garantálja, hogy ennél nagyobb napi veszteség nem következhet be.
+"""
+            )
+
+            if len(tortenet) < 252:
+
+                st.warning(
+                    f"A számítás jelenleg csak "
+                    f"{len(tortenet)} historikus megfigyelésen alapul. "
+                    "Egy teljes kereskedési év körülbelül 252 nap, "
+                    "ezért a mutatók rövidebb adatsor esetén "
+                    "jelentősen változhatnak."
+                )
+
+        # =============================================
         # DRAWDOWN
         # =============================================
 
@@ -2782,6 +3098,40 @@ with tab1:
             st.metric(
                 "Teljes hozam",
                 f"{hozam:+.2f}%"
+            )
+
+
+        st.markdown(
+            "#### 💳 Tranzakciós költségek"
+        )
+
+
+        if tranzakcios_dijak:
+
+            dij_oszlopok = st.columns(
+                len(tranzakcios_dijak)
+            )
+
+            for col, (
+                deviza,
+                osszeg
+            ) in zip(
+                dij_oszlopok,
+                tranzakcios_dijak.items()
+            ):
+
+                with col:
+
+                    st.metric(
+                        f"Összes díj ({deviza})",
+                        f"{osszeg:,.2f} {deviza}"
+                    )
+
+        else:
+
+            st.metric(
+                "Összes tranzakciós díj",
+                "0"
             )
 
 

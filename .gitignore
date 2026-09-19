@@ -1,6 +1,27 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+
+# macOS
 .DS_Store
+
+# Virtual environment
+.venv/
+venv/
+
+# Portfolio / personal data
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Broker exports / personal CSV files
+*.csv
+
+# Excel imports containing personal portfolio data
+*.xlsx
+*.xls
+
+# Environment / API keys
 .env
-.streamlit/portfolio.db
-portfolio.db
+.streamlit/secrets.toml
