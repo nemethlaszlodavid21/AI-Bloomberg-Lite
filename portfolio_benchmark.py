@@ -28,15 +28,26 @@ def _market_history(
         )
 
         if adat.empty:
-            return pd.Series(dtype=float)
 
-        sorozat = adat[
-            "Close"
-        ].copy()
+            return pd.Series(
+                dtype=float
+            )
 
-        sorozat.index = pd.to_datetime(
-            sorozat.index
+
+        sorozat = (
+            adat[
+                "Close"
+            ]
+            .copy()
         )
+
+
+        sorozat.index = (
+            pd.to_datetime(
+                sorozat.index
+            )
+        )
+
 
         if sorozat.index.tz is not None:
 
@@ -45,7 +56,15 @@ def _market_history(
                 .tz_localize(None)
             )
 
+
+        sorozat.index = (
+            sorozat.index
+            .normalize()
+        )
+
+
         return sorozat
+
 
     except Exception:
 
@@ -64,21 +83,72 @@ def _normalizalas(
         .astype(float)
     )
 
+
     if sorozat.empty:
+
         return sorozat
+
 
     elso_ertek = (
         sorozat.iloc[0]
     )
 
+
     if elso_ertek == 0:
+
         return sorozat
+
 
     return (
         sorozat
         / elso_ertek
         * 100
     )
+
+
+def _portfolio_index_daily_returnbol(
+    adat
+):
+
+    if (
+        "Daily Return"
+        not in adat.columns
+    ):
+
+        return pd.Series(
+            dtype=float
+        )
+
+
+    napi_hozam = (
+        pd.to_numeric(
+            adat[
+                "Daily Return"
+            ],
+            errors="coerce"
+        )
+        .replace(
+            [
+                float("inf"),
+                float("-inf")
+            ],
+            pd.NA
+        )
+        .fillna(0.0)
+    )
+
+
+    portfolio_index = (
+        (
+            1.0
+            + napi_hozam
+        )
+        .cumprod()
+        * 100
+    )
+
+
+    return portfolio_index
 
 
 def _benchmark_huf(
@@ -89,37 +159,61 @@ def _benchmark_huf(
     end_date
 ):
 
-    index_ar = _market_history(
-        index_ticker,
-        start_date,
-        end_date
+    index_ar = (
+        _market_history(
+            index_ticker,
+            start_date,
+            end_date
+        )
     )
 
+
     if index_ar.empty:
-        return pd.Series(dtype=float)
+
+        return pd.Series(
+            dtype=float
+        )
+
+
+    if usd_huf.empty:
+
+        return pd.Series(
+            dtype=float
+        )
+
 
     kozos_index = (
         index_ar.index
-        .union(usd_huf.index)
+        .union(
+            usd_huf.index
+        )
         .sort_values()
     )
 
+
     index_ar = (
         index_ar
-        .reindex(kozos_index)
+        .reindex(
+            kozos_index
+        )
         .ffill()
     )
 
+
     fx = (
         usd_huf
-        .reindex(kozos_index)
+        .reindex(
+            kozos_index
+        )
         .ffill()
     )
+
 
     index_huf = (
         index_ar
         * fx
     )
+
 
     index_huf = (
         index_huf
@@ -130,8 +224,11 @@ def _benchmark_huf(
         .bfill()
     )
 
-    return _normalizalas(
-        index_huf
+
+    return (
+        _normalizalas(
+            index_huf
+        )
     )
 
 
@@ -143,16 +240,29 @@ def benchmark_osszehasonlitas(
     if (
         tortenet is None
         or tortenet.empty
-        or "Portfolio" not in tortenet.columns
     ):
 
         return pd.DataFrame()
 
 
-    adat = tortenet.copy()
+    if (
+        "Daily Return"
+        not in tortenet.columns
+    ):
 
-    adat.index = pd.to_datetime(
-        adat.index
+        return pd.DataFrame()
+
+
+    adat = (
+        tortenet
+        .copy()
+    )
+
+
+    adat.index = (
+        pd.to_datetime(
+            adat.index
+        )
     )
 
 
@@ -164,12 +274,23 @@ def benchmark_osszehasonlitas(
         )
 
 
-    adat = adat.sort_index()
+    adat.index = (
+        adat.index
+        .normalize()
+    )
 
 
-    napok = IDOTAVOK.get(
-        idotav,
-        366
+    adat = (
+        adat
+        .sort_index()
+    )
+
+
+    napok = (
+        IDOTAVOK.get(
+            idotav,
+            366
+        )
     )
 
 
@@ -186,12 +307,17 @@ def benchmark_osszehasonlitas(
     )
 
 
-    adat = adat.loc[
-        adat.index >= kezdo_datum
-    ]
+    adat = (
+        adat.loc[
+            adat.index
+            >= kezdo_datum
+        ]
+        .copy()
+    )
 
 
     if adat.empty:
+
         return pd.DataFrame()
 
 
@@ -200,11 +326,27 @@ def benchmark_osszehasonlitas(
     )
 
 
+    # ================================================
+    # PORTFÓLIÓ TELJESÍTMÉNYINDEX
+    # ================================================
+    #
+    # Nem a nyers portfólióértéket normalizáljuk.
+    #
+    # A Daily Return cash-flow-semleges hozamsorozat,
+    # ezért egy BUY vagy SELL tranzakció önmagában
+    # nem okoz mesterséges teljesítményugrást.
+    # ================================================
+
     portfolio_normalizalt = (
-        _normalizalas(
-            adat["Portfolio"]
+        _portfolio_index_daily_returnbol(
+            adat
         )
     )
+
+
+    if portfolio_normalizalt.empty:
+
+        return pd.DataFrame()
 
 
     start_date = (
@@ -223,30 +365,57 @@ def benchmark_osszehasonlitas(
     )
 
 
-    usd_huf = _market_history(
-        "USDHUF=X",
-        start_date,
-        end_date
+    # ================================================
+    # USD/HUF
+    # ================================================
+
+    usd_huf = (
+        _market_history(
+            "USDHUF=X",
+            start_date,
+            end_date
+        )
     )
 
 
-    sp500 = _benchmark_huf(
-        "^GSPC",
-        usd_huf,
-        portfolio_index,
-        start_date,
-        end_date
+    if usd_huf.empty:
+
+        return pd.DataFrame()
+
+
+    # ================================================
+    # S&P 500 HUF
+    # ================================================
+
+    sp500 = (
+        _benchmark_huf(
+            "^GSPC",
+            usd_huf,
+            portfolio_index,
+            start_date,
+            end_date
+        )
     )
 
 
-    nasdaq = _benchmark_huf(
-        "^NDX",
-        usd_huf,
-        portfolio_index,
-        start_date,
-        end_date
+    # ================================================
+    # NASDAQ 100 HUF
+    # ================================================
+
+    nasdaq = (
+        _benchmark_huf(
+            "^NDX",
+            usd_huf,
+            portfolio_index,
+            start_date,
+            end_date
+        )
     )
 
+
+    # ================================================
+    # EREDMÉNY
+    # ================================================
 
     eredmeny = pd.DataFrame(
         index=portfolio_index
@@ -255,7 +424,9 @@ def benchmark_osszehasonlitas(
 
     eredmeny[
         "Portfolio"
-    ] = portfolio_normalizalt
+    ] = (
+        portfolio_normalizalt
+    )
 
 
     if not sp500.empty:
@@ -310,7 +481,11 @@ def benchmark_hozamok(
             .dropna()
         )
 
-        if len(sorozat) < 2:
+
+        if len(
+            sorozat
+        ) < 2:
+
             continue
 
 

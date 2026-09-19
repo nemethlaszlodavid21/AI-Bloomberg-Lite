@@ -4,112 +4,108 @@ import pandas as pd
 
 def napi_hozamok_szamitas(tortenet):
 
-    if tortenet is None:
+    if tortenet is None or tortenet.empty:
         return pd.Series(dtype=float)
 
-    if tortenet.empty:
-        return pd.Series(dtype=float)
+    if "Daily Return" in tortenet.columns:
+
+        return (
+            pd.to_numeric(
+                tortenet["Daily Return"],
+                errors="coerce"
+            )
+            .replace(
+                [np.inf, -np.inf],
+                np.nan
+            )
+            .dropna()
+        )
 
     if "Portfolio" not in tortenet.columns:
         return pd.Series(dtype=float)
 
-    napi_hozamok = (
+    return (
         tortenet["Portfolio"]
         .pct_change()
+        .replace(
+            [np.inf, -np.inf],
+            np.nan
+        )
         .dropna()
     )
 
-    return napi_hozamok
 
+def annualizalt_volatilitas(napi_hozamok):
 
-def annualizalt_volatilitas(
-    napi_hozamok
-):
-
-    if napi_hozamok.empty:
+    if napi_hozamok is None or len(napi_hozamok) < 2:
         return None
 
+    szoras = napi_hozamok.std()
+
+    if pd.isna(szoras):
+        return None
+
+    return szoras * np.sqrt(252) * 100
+
+
+def _hozam_index(tortenet):
+
+    napi_hozamok = napi_hozamok_szamitas(
+        tortenet
+    )
+
+    if napi_hozamok.empty:
+        return pd.Series(dtype=float)
+
     return (
-        napi_hozamok.std()
-        * np.sqrt(252)
+        (1.0 + napi_hozamok)
+        .cumprod()
         * 100
     )
 
 
-def max_drawdown_szamitas(
-    tortenet
-):
+def max_drawdown_szamitas(tortenet):
 
-    if tortenet is None:
-        return None
-
-    if tortenet.empty:
-        return None
-
-    if "Portfolio" not in tortenet.columns:
-        return None
-
-    portfolio_ertek = (
-        tortenet["Portfolio"]
-        .dropna()
+    hozam_index = _hozam_index(
+        tortenet
     )
 
-    if portfolio_ertek.empty:
+    if hozam_index.empty:
         return None
 
-    running_max = (
-        portfolio_ertek
-        .cummax()
-    )
+    running_max = hozam_index.cummax()
 
     drawdown = (
-        portfolio_ertek
+        hozam_index
         / running_max
         - 1
     )
 
-    return (
-        drawdown.min()
-        * 100
+    return drawdown.min() * 100
+
+
+def drawdown_idosor(tortenet):
+
+    hozam_index = _hozam_index(
+        tortenet
     )
 
-
-def drawdown_idosor(
-    tortenet
-):
-
-    if tortenet is None:
+    if hozam_index.empty:
         return pd.DataFrame()
 
-    if tortenet.empty:
-        return pd.DataFrame()
-
-    if "Portfolio" not in tortenet.columns:
-        return pd.DataFrame()
-
-    portfolio_ertek = (
-        tortenet["Portfolio"]
-        .dropna()
-    )
-
-    running_max = (
-        portfolio_ertek
-        .cummax()
-    )
+    running_max = hozam_index.cummax()
 
     drawdown = (
-        portfolio_ertek
+        hozam_index
         / running_max
         - 1
     ) * 100
 
-    eredmeny = pd.DataFrame(
+    return pd.DataFrame(
         {
             "Drawdown %": drawdown
         }
     )
-
-    return eredmeny
 
 
 def sharpe_ratio_szamitas(
@@ -117,13 +113,13 @@ def sharpe_ratio_szamitas(
     kockazatmentes_hozam=0.0
 ):
 
-    if napi_hozamok.empty:
+    if napi_hozamok is None or len(napi_hozamok) < 2:
         return None
 
     napi_rf = (
-        kockazatmentes_hozam
-        / 100
-        / 252
+        (1 + float(kockazatmentes_hozam) / 100)
+        ** (1 / 252)
+        - 1
     )
 
     excess_return = (
@@ -133,16 +129,14 @@ def sharpe_ratio_szamitas(
 
     szoras = excess_return.std()
 
-    if szoras == 0:
+    if pd.isna(szoras) or szoras == 0:
         return None
 
-    sharpe = (
+    return (
         excess_return.mean()
         / szoras
         * np.sqrt(252)
     )
-
-    return sharpe
 
 
 def sortino_ratio_szamitas(
@@ -150,13 +144,13 @@ def sortino_ratio_szamitas(
     kockazatmentes_hozam=0.0
 ):
 
-    if napi_hozamok.empty:
+    if napi_hozamok is None or napi_hozamok.empty:
         return None
 
     napi_rf = (
-        kockazatmentes_hozam
-        / 100
-        / 252
+        (1 + float(kockazatmentes_hozam) / 100)
+        ** (1 / 252)
+        - 1
     )
 
     excess_return = (
@@ -164,36 +158,35 @@ def sortino_ratio_szamitas(
         - napi_rf
     )
 
-    negativ_hozamok = (
-        excess_return[
-            excess_return < 0
-        ]
+    downside = np.minimum(
+        excess_return,
+        0.0
     )
 
-    if negativ_hozamok.empty:
-        return None
-
-    downside_deviation = (
-        negativ_hozamok.std()
+    downside_deviation = np.sqrt(
+        np.mean(
+            np.square(
+                downside
+            )
+        )
     )
 
-    if downside_deviation == 0:
+    if (
+        pd.isna(downside_deviation)
+        or downside_deviation == 0
+    ):
         return None
 
-    sortino = (
+    return (
         excess_return.mean()
         / downside_deviation
         * np.sqrt(252)
     )
 
-    return sortino
 
+def historikus_var_95(napi_hozamok):
 
-def historikus_var_95(
-    napi_hozamok
-):
-
-    if napi_hozamok.empty:
+    if napi_hozamok is None or napi_hozamok.empty:
         return None
 
     percentile = np.percentile(
@@ -201,37 +194,23 @@ def historikus_var_95(
         5
     )
 
-    return (
-        percentile
-        * 100
-    )
+    return percentile * 100
 
 
-def beta_szamitas(
-    portfolio_benchmark
-):
+def beta_szamitas(portfolio_benchmark):
 
-    if portfolio_benchmark is None:
-        return None
-
-    if portfolio_benchmark.empty:
+    if portfolio_benchmark is None or portfolio_benchmark.empty:
         return None
 
     if (
-        "Portfolio"
-        not in portfolio_benchmark.columns
-        or
-        "S&P 500"
-        not in portfolio_benchmark.columns
+        "Portfolio" not in portfolio_benchmark.columns
+        or "S&P 500" not in portfolio_benchmark.columns
     ):
         return None
 
     adatok = (
         portfolio_benchmark[
-            [
-                "Portfolio",
-                "S&P 500"
-            ]
+            ["Portfolio", "S&P 500"]
         ]
         .dropna()
     )
@@ -264,7 +243,10 @@ def beta_szamitas(
         .var()
     )
 
-    if benchmark_variancia == 0:
+    if (
+        pd.isna(benchmark_variancia)
+        or benchmark_variancia == 0
+    ):
         return None
 
     covariance = (
@@ -274,12 +256,10 @@ def beta_szamitas(
         )
     )
 
-    beta = (
+    return (
         covariance
         / benchmark_variancia
     )
-
-    return beta
 
 
 def risk_analytics_szamitas(
@@ -295,36 +275,26 @@ def risk_analytics_szamitas(
         )
     )
 
-    volatilitas = (
-        annualizalt_volatilitas(
-            napi_hozamok
-        )
+    volatilitas = annualizalt_volatilitas(
+        napi_hozamok
     )
 
-    max_drawdown = (
-        max_drawdown_szamitas(
-            tortenet
-        )
+    max_drawdown = max_drawdown_szamitas(
+        tortenet
     )
 
-    sharpe = (
-        sharpe_ratio_szamitas(
-            napi_hozamok,
-            kockazatmentes_hozam
-        )
+    sharpe = sharpe_ratio_szamitas(
+        napi_hozamok,
+        kockazatmentes_hozam
     )
 
-    sortino = (
-        sortino_ratio_szamitas(
-            napi_hozamok,
-            kockazatmentes_hozam
-        )
+    sortino = sortino_ratio_szamitas(
+        napi_hozamok,
+        kockazatmentes_hozam
     )
 
-    var_95_szazalek = (
-        historikus_var_95(
-            napi_hozamok
-        )
+    var_95_szazalek = historikus_var_95(
+        napi_hozamok
     )
 
     beta = beta_szamitas(
@@ -332,41 +302,25 @@ def risk_analytics_szamitas(
     )
 
     if (
-        var_95_szazalek
-        is not None
+        var_95_szazalek is not None
+        and portfolio_ertek is not None
     ):
 
         var_95_huf = (
-            portfolio_ertek
-            * abs(
-                var_95_szazalek
-            )
+            float(portfolio_ertek)
+            * abs(var_95_szazalek)
             / 100
         )
 
     else:
-
         var_95_huf = None
 
     return {
-        "Volatilitás %":
-            volatilitas,
-
-        "Max Drawdown %":
-            max_drawdown,
-
-        "Sharpe Ratio":
-            sharpe,
-
-        "Sortino Ratio":
-            sortino,
-
-        "Beta":
-            beta,
-
-        "VaR 95% %":
-            var_95_szazalek,
-
-        "VaR 95% HUF":
-            var_95_huf
+        "Volatilitás %": volatilitas,
+        "Max Drawdown %": max_drawdown,
+        "Sharpe Ratio": sharpe,
+        "Sortino Ratio": sortino,
+        "Beta": beta,
+        "VaR 95% %": var_95_szazalek,
+        "VaR 95% HUF": var_95_huf
     }

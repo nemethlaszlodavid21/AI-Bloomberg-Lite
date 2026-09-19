@@ -508,7 +508,8 @@ if not portfolio.empty:
 
         tortenet = (
             portfolio_tortenet(
-                portfolio
+                portfolio,
+                db_tranzakciok
             )
         )
 
@@ -2161,12 +2162,24 @@ with tab1:
 
         rf = (
             st.number_input(
-                "Kockázatmentes hozam (%)",
+                "Éves kockázatmentes hozam (%)",
+                help=(
+                    "A Sharpe és Sortino mutatók számításához használt "
+                    "éves referenciahozam. Például rövid lejáratú, "
+                    "alacsony kockázatú állampapír hozama."
+                ),
                 min_value=0.0,
                 max_value=20.0,
                 value=0.0,
                 step=0.25
             )
+        )
+
+
+        st.caption(
+            "A Sharpe és Sortino mutatók számításához használt éves "
+            "referenciahozam. Például rövid lejáratú, alacsony "
+            "kockázatú állampapír hozama."
         )
 
 
