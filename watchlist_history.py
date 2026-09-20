@@ -1,7 +1,9 @@
+import streamlit as st
 import yfinance as yf
 import pandas as pd
 
 
+@st.cache_data(ttl=900, show_spinner=False)
 def watchlist_tortenet(ticker, period="30d"):
 
     adat = yf.download(

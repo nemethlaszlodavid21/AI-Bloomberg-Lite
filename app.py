@@ -95,6 +95,10 @@ from ai_portfolio_analyst import (
     portfolio_elemzes_2
 )
 
+from data_quality import (
+    adatminoseg_elemzes
+)
+
 from watchlist import (
     watchlist_lekerese
 )
@@ -848,11 +852,11 @@ if (
 tab0, tab1, tab2, tab3, tab4 = (
     st.tabs(
         [
-            "Kezdőlap",
-            "Portfólió",
-            "Piac",
-            "Részvényelemzés",
-            "AI Asszisztens"
+            "🏠 Kezdőlap",
+            "💼 Portfólió",
+            "🌐 Piac",
+            "📈 Részvényelemzés",
+            "🤖 AI Asszisztens"
         ]
     )
 )
@@ -1260,9 +1264,17 @@ with tab1:
     )
 
 
+    st.info(
+        "Első lépésként add meg a befektetési tranzakcióidat. "
+        "Válaszd ki az alábbi három lehetőség közül a számodra "
+        "megfelelő adatbeviteli módot. A portfólió, a kockázati "
+        "mutatók és az elemzések ezekből az adatokból épülnek fel."
+    )
+
+
     st.caption(
-        "A portfólió kizárólag az itt rögzített BUY és SELL "
-        "tranzakciókból épül fel."
+        "Workflow: Tranzakciók bevitele vagy importálása → "
+        "Portfólió felépítése → Elemzés"
     )
 
 
@@ -1271,8 +1283,8 @@ with tab1:
     # =================================================
 
     with st.expander(
-        "Új tranzakció",
-        expanded=not van_tranzakcio
+        "Új tranzakció hozzáadása — kézi BUY / SELL rögzítés",
+        expanded=False
     ):
 
         with st.form(
@@ -1617,7 +1629,7 @@ with tab1:
     # =================================================
 
     with st.expander(
-        "Interactive Brokers CSV import",
+        "Adatok importálása — Interactive Brokers CSV",
         expanded=False
     ):
 
@@ -1893,7 +1905,7 @@ with tab1:
     # =================================================
 
     with st.expander(
-        "Excel sablon és import",
+        "Excel importálás — sablon letöltése és feltöltése",
         expanded=False
     ):
 
@@ -3710,6 +3722,54 @@ with tab4:
 
         try:
 
+            adatminoseg = adatminoseg_elemzes(
+                tranzakciok=db_tranzakciok,
+                portfolio=portfolio,
+                poziciok=db_poziciok,
+                tortenet=tortenet,
+                koltsegek=tranzakcios_koltsegek,
+                benchmark_adatok=locals().get("risk_benchmark_adatok"),
+            )
+
+            st.markdown("#### Adatminőség és lefedettség")
+
+            dq1, dq2, dq3, dq4 = st.columns(4)
+
+            with dq1:
+                st.metric("Adatállapot", adatminoseg["adatstatusz"])
+
+            with dq2:
+                st.metric(
+                    "Árfolyam-lefedettség",
+                    f'{adatminoseg["arfolyam_lefedettseg_pct"]:.0f}%'
+                )
+
+            with dq3:
+                st.metric(
+                    "FX-lefedettség",
+                    f'{adatminoseg["fx_lefedettseg_pct"]:.0f}%'
+                )
+
+            with dq4:
+                st.metric(
+                    "Historikus minta",
+                    f'{adatminoseg["historikus_napok"]} nap'
+                )
+
+            st.caption(
+                "Bekerülési érték lefedettsége: "
+                f'{adatminoseg["bekerules_lefedettseg_pct"]:.0f}% · '
+                "Benchmark: "
+                f'{"elérhető" if adatminoseg["benchmark_elerheto"] else "nem elérhető"}'
+            )
+
+            if adatminoseg["megjegyzesek"]:
+                with st.expander("ℹ️ Adatminőségi megjegyzések"):
+                    for megjegyzes in adatminoseg["megjegyzesek"]:
+                        st.write(f"- {megjegyzes}")
+
+            st.divider()
+
             ai_elemzes = portfolio_elemzes_2(
                 portfolio=portfolio,
                 risk=locals().get("risk", {}),
@@ -3720,6 +3780,7 @@ with tab4:
                 currency_exposure=currency_exposure,
                 cash_pct=cash_szazalek,
                 history_days=len(tortenet) if not tortenet.empty else 0,
+                data_quality=adatminoseg,
             )
 
             st.caption(

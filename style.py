@@ -76,26 +76,64 @@ def alkalmaz_style():
         }
 
 
-        /* ===== TABS ===== */
+        /* ===== TOP NAVIGATION / TABS ===== */
 
         .stTabs [data-baseweb="tab-list"] {
-            gap: 6px;
-            border-bottom: 1px solid #d1d5db;
+            gap: 8px;
+            padding: 6px;
+            margin-bottom: 18px;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
         }
 
         .stTabs [data-baseweb="tab"] {
             height: 44px;
-            padding-left: 18px;
-            padding-right: 18px;
-            color: #4b5563;
+            padding: 0 18px;
+            color: #64748b;
             background: transparent;
-            border-radius: 8px 8px 0 0;
+            border: 1px solid transparent;
+            border-radius: 9px;
+            font-weight: 600;
+            transition:
+                background-color 0.16s ease,
+                color 0.16s ease,
+                border-color 0.16s ease,
+                box-shadow 0.16s ease;
         }
 
-        .stTabs [aria-selected="true"] {
-            color: #111827;
-            background: #ffffff;
-            border-bottom: 2px solid #2563eb;
+        .stTabs [data-baseweb="tab"]:hover {
+            color: #1e3a5f;
+            background: #f8fafc;
+            border-color: #e2e8f0;
+        }
+
+        .stTabs [data-baseweb="tab"][aria-selected="true"] {
+            color: #0f172a;
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+        }
+
+        .stTabs [data-baseweb="tab-highlight"] {
+            display: none;
+        }
+
+        .stTabs [data-baseweb="tab-border"] {
+            display: none;
+        }
+
+        @media (max-width: 900px) {
+            .stTabs [data-baseweb="tab-list"] {
+                overflow-x: auto;
+                justify-content: flex-start;
+            }
+
+            .stTabs [data-baseweb="tab"] {
+                flex: 0 0 auto;
+                padding: 0 14px;
+            }
         }
 
 

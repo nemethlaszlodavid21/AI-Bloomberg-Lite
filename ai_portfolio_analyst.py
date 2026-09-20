@@ -61,10 +61,12 @@ def portfolio_elemzes_2(
     currency_exposure: pd.DataFrame | None = None,
     cash_pct: float | None = None,
     history_days: int | None = None,
+    data_quality: dict | None = None,
 ):
     """Strukturált elemzést ad vissza kizárólag a kiszámított app-adatokból."""
     risk = risk or {}
     koltsegek = koltsegek or {}
+    data_quality = data_quality or {}
     sections: list[dict[str, Any]] = []
 
     # Portfólióstruktúra
@@ -136,6 +138,31 @@ def portfolio_elemzes_2(
     if coverage is not None:
         cost_items.append(f"Historikus FX-lefedettség: {coverage:.1f}%.")
     sections.append({"title": "Tranzakciós költségek", "items": cost_items or ["Nincs rendelkezésre álló tranzakciós költségadat."]})
+
+    # Adatminőség és lefedettség
+    dq_items = []
+    if data_quality:
+        if data_quality.get("adatstatusz"):
+            dq_items.append(f'Adatállapot: {data_quality["adatstatusz"]}.')
+        for key, label in [
+            ("arfolyam_lefedettseg_pct", "Árfolyam-lefedettség"),
+            ("fx_lefedettseg_pct", "Historikus FX-lefedettség"),
+            ("bekerules_lefedettseg_pct", "Bekerülési érték lefedettsége"),
+        ]:
+            value = _num(data_quality.get(key))
+            if value is not None:
+                dq_items.append(f"{label}: {value:.0f}%.")
+        dq_items.append(
+            "Benchmark-adat: "
+            + ("elérhető." if data_quality.get("benchmark_elerheto") else "nem elérhető.")
+        )
+        for note in data_quality.get("megjegyzesek", [])[:3]:
+            dq_items.append(note)
+
+    sections.append({
+        "title": "Adatminőség",
+        "items": dq_items or ["Nincs külön adatminőségi figyelmeztetés."]
+    })
 
     # Megfigyelések – leíró, nem befektetési ajánlás
     notes = []

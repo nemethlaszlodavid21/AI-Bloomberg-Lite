@@ -1,6 +1,8 @@
+import streamlit as st
 import yfinance as yf
 
 
+@st.cache_data(ttl=900, show_spinner=False)
 def stock_snapshot(ticker):
 
     stock = yf.Ticker(ticker)

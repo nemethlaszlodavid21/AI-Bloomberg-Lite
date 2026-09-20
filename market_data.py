@@ -1,3 +1,4 @@
+import streamlit as st
 import yfinance as yf
 
 
@@ -51,6 +52,7 @@ def yahoo_ticker(ticker):
 # AKTUÁLIS ÁRFOLYAM
 # ==================================================
 
+@st.cache_data(ttl=300, show_spinner=False)
 def get_price(ticker):
 
     eredeti_ticker = str(
@@ -162,6 +164,7 @@ def get_price(ticker):
 # TÖBB TICKER ÁRFOLYAMÁNAK LEKÉRÉSE
 # ==================================================
 
+@st.cache_data(ttl=300, show_spinner=False)
 def arak_lekerese(
     tickerek
 ):

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import streamlit as st
 
 from datetime import timedelta
 
@@ -14,6 +15,7 @@ FX_TICKERS = {
 }
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
 def historikus_fx_adatok(deviza: str, kezdo_datum, veg_datum):
     deviza = str(deviza).upper().strip()
 

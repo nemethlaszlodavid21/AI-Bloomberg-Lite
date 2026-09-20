@@ -1,3 +1,4 @@
+import streamlit as st
 import pandas as pd
 import yfinance as yf
 
@@ -46,6 +47,7 @@ def _deviza_tisztitas(
 # AKTUÁLIS DEVIZAÁRFOLYAM
 # ===================================================
 
+@st.cache_data(ttl=300, show_spinner=False)
 def aktualis_huf_arfolyam(
     deviza
 ):
@@ -122,6 +124,7 @@ def aktualis_huf_arfolyam(
 # TÖRTÉNELMI DEVIZAÁRFOLYAM
 # ===================================================
 
+@st.cache_data(ttl=86400, show_spinner=False)
 def historikus_huf_arfolyam(
     deviza,
     datum

@@ -1,3 +1,4 @@
+import streamlit as st
 import yfinance as yf
 
 
@@ -29,6 +30,7 @@ MARKET_ESZKOZOK = {
 }
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def market_overview_lekerese():
 
     eredmenyek = []

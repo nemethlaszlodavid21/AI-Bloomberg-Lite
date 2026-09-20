@@ -1,3 +1,4 @@
+import streamlit as st
 import pandas as pd
 import yfinance as yf
 
@@ -8,6 +9,7 @@ from market_data import arak_lekerese
 # DEVIZAÁRFOLYAM LEKÉRÉSE
 # ===================================================
 
+@st.cache_data(ttl=300, show_spinner=False)
 def deviza_huf_arfolyam(
     deviza
 ):

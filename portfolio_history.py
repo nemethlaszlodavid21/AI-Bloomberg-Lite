@@ -1,3 +1,4 @@
+import streamlit as st
 import pandas as pd
 import yfinance as yf
 
@@ -23,6 +24,7 @@ def _ures_tortenet():
 # HISTORIKUS TICKER ÁRAK
 # ===================================================
 
+@st.cache_data(ttl=3600, show_spinner=False)
 def _ticker_historikus_arak(
     ticker,
     start_date,
@@ -124,6 +126,7 @@ def _ticker_historikus_arak(
 # HISTORIKUS FX
 # ===================================================
 
+@st.cache_data(ttl=3600, show_spinner=False)
 def _fx_historikus_arak(
     deviza,
     start_date,
