@@ -73,6 +73,10 @@ from excel_import import (
     excel_tranzakciok_feldolgozasa
 )
 
+from transaction_costs import (
+    tranzakcios_koltsegek_elemzese
+)
+
 from portfolio_engine import (
     poziciok_szamitas_db,
     portfolio_adatframe_db,
@@ -87,8 +91,8 @@ from market_overview import (
     market_overview_lekerese
 )
 
-from ai_analyst import (
-    portfolio_ai_elemzes
+from ai_portfolio_analyst import (
+    portfolio_elemzes_2
 )
 
 from watchlist import (
@@ -114,7 +118,7 @@ from style import (
 
 st.set_page_config(
     page_title="AI Bloomberg Lite",
-    page_icon="📈",
+    page_icon=None,
     layout="wide"
 )
 
@@ -182,27 +186,44 @@ van_tranzakcio = (
 
 
 # ===================================================
-# TRANZAKCIÓS DÍJAK
+# TRANZAKCIÓS KÖLTSÉGEK
 # ===================================================
 
-if (
-    van_tranzakcio
-    and "fee" in db_tranzakciok.columns
-    and "currency" in db_tranzakciok.columns
-):
+if van_tranzakcio:
 
-    tranzakcios_dijak = (
-        db_tranzakciok
-        .groupby(
-            "currency"
-        )["fee"]
-        .sum()
-        .to_dict()
-    )
+    try:
+
+        tranzakcios_koltsegek = (
+            tranzakcios_koltsegek_elemzese(
+                db_tranzakciok
+            )
+        )
+
+    except Exception:
+
+        tranzakcios_koltsegek = {
+            "osszes_dij_huf": 0.0,
+            "atlag_dij_huf": 0.0,
+            "tranzakciok_szama": 0,
+            "dijak_devizankent": {},
+            "buy_forgalom_huf": 0.0,
+            "koltseghanyad_pct": None,
+            "fx_lefedettseg_pct": 0.0,
+            "fx_hianyzo_devizak": [],
+        }
 
 else:
 
-    tranzakcios_dijak = {}
+    tranzakcios_koltsegek = {
+        "osszes_dij_huf": 0.0,
+        "atlag_dij_huf": 0.0,
+        "tranzakciok_szama": 0,
+        "dijak_devizankent": {},
+        "buy_forgalom_huf": 0.0,
+        "koltseghanyad_pct": None,
+        "fx_lefedettseg_pct": 0.0,
+        "fx_hianyzo_devizak": [],
+    }
 
 
 # ===================================================
@@ -827,11 +848,11 @@ if (
 tab0, tab1, tab2, tab3, tab4 = (
     st.tabs(
         [
-            "🏠 Kezdőlap",
-            "💼 Portfólió",
-            "👀 Piac",
-            "🔎 Részvényelemzés",
-            "🤖 AI Asszisztens"
+            "Kezdőlap",
+            "Portfólió",
+            "Piac",
+            "Részvényelemzés",
+            "AI Asszisztens"
         ]
     )
 )
@@ -845,7 +866,7 @@ tab0, tab1, tab2, tab3, tab4 = (
 with tab0:
 
     st.subheader(
-        "🏠 Vezetői áttekintés"
+        "Vezetői áttekintés"
     )
 
 
@@ -862,7 +883,7 @@ with tab0:
 
         st.info(
             "Még nincs rögzített tranzakció. "
-            "Nyisd meg a 💼 Portfólió fület, majd adj hozzá "
+            "Nyisd meg a Portfólió fület, majd adj hozzá "
             "egy BUY tranzakciót."
         )
 
@@ -879,7 +900,7 @@ with tab0:
     with home1:
 
         st.metric(
-            "💰 Teljes portfólió",
+            "Teljes portfólió",
             f"{teljes_portfolio_ertek:,.0f} Ft"
         )
 
@@ -887,7 +908,7 @@ with tab0:
     with home2:
 
         st.metric(
-            "💵 Készpénz",
+            "Készpénz",
             f"{cash_huf:,.0f} Ft",
             f"{cash_szazalek:.1f}%"
         )
@@ -896,7 +917,7 @@ with tab0:
     with home3:
 
         st.metric(
-            "📈 Teljes hozam",
+            "Teljes hozam",
             (
                 f"{hozam:+.2f}%"
                 if not portfolio.empty
@@ -908,7 +929,7 @@ with tab0:
     with home4:
 
         st.metric(
-            "🧠 Risk Score",
+            "Risk Score",
             (
                 f"{score}/100"
                 if not portfolio.empty
@@ -925,7 +946,7 @@ with tab0:
     # =================================================
 
     st.subheader(
-        "💵 Tőkeallokáció"
+        "Tőkeallokáció"
     )
 
 
@@ -974,7 +995,7 @@ with tab0:
     # =================================================
 
     st.subheader(
-        "🌎 Piaci pillanatkép"
+        "Piaci pillanatkép"
     )
 
 
@@ -1056,7 +1077,7 @@ with tab0:
     # =================================================
 
     st.subheader(
-        "🧠 Portfólió állapot"
+        "Portfólió állapot"
     )
 
 
@@ -1120,7 +1141,7 @@ with tab0:
 
 
         st.subheader(
-            "🌍 Valódi szektorkitettség"
+            "Valódi szektorkitettség"
         )
 
 
@@ -1168,7 +1189,7 @@ with tab0:
 with tab1:
 
     st.subheader(
-        "💼 Portfólió Áttekintés"
+        "Portfólió áttekintés"
     )
 
 
@@ -1198,7 +1219,7 @@ with tab1:
     with col1:
 
         st.metric(
-            "💰 Teljes portfólió",
+            "Teljes portfólió",
             f"{teljes_portfolio_ertek:,.0f} Ft"
         )
 
@@ -1206,7 +1227,7 @@ with tab1:
     with col2:
 
         st.metric(
-            "📈 Befektetve",
+            "Befektetve",
             f"{teljes_ertek:,.0f} Ft"
         )
 
@@ -1214,7 +1235,7 @@ with tab1:
     with col3:
 
         st.metric(
-            "💵 Készpénz",
+            "Készpénz",
             f"{cash_huf:,.0f} Ft"
         )
 
@@ -1250,7 +1271,7 @@ with tab1:
     # =================================================
 
     with st.expander(
-        "➕ Új tranzakció",
+        "Új tranzakció",
         expanded=not van_tranzakcio
     ):
 
@@ -1596,7 +1617,7 @@ with tab1:
     # =================================================
 
     with st.expander(
-        "📥 Interactive Brokers CSV import",
+        "Interactive Brokers CSV import",
         expanded=False
     ):
 
@@ -1780,7 +1801,7 @@ with tab1:
                         # -----------------------------------------
 
                         if st.button(
-                            "📥 Tranzakciók importálása",
+                            "Tranzakciók importálása",
                             type="primary",
                             key="ibkr_import_button"
                         ):
@@ -1872,7 +1893,7 @@ with tab1:
     # =================================================
 
     with st.expander(
-        "📊 Excel sablon és import",
+        "Excel sablon és import",
         expanded=False
     ):
 
@@ -1971,7 +1992,7 @@ with tab1:
                 )
 
                 if st.button(
-                    "📥 Excel tranzakciók importálása",
+                    "Excel tranzakciók importálása",
                     type="primary",
                     key="excel_import_button"
                 ):
@@ -2046,7 +2067,7 @@ with tab1:
     # =================================================
 
     with st.expander(
-        "📒 Tranzakciós napló",
+        "Tranzakciós napló",
         expanded=False
     ):
 
@@ -2238,7 +2259,7 @@ with tab1:
     # =================================================
 
     st.subheader(
-        "💵 Készpénz kezelés"
+        "Készpénz kezelés"
     )
 
 
@@ -2323,7 +2344,7 @@ with tab1:
     # =================================================
 
     st.subheader(
-        "📋 Portfólióállomány"
+        "Portfólióállomány"
     )
 
 
@@ -2373,7 +2394,7 @@ with tab1:
         # =============================================
 
         st.subheader(
-            "🌍 ETF szektor megoszlás"
+            "ETF szektor megoszlás"
         )
 
 
@@ -2424,7 +2445,7 @@ with tab1:
 
 
             st.subheader(
-                "🧩 További kitettségek"
+                "További kitettségek"
             )
 
 
@@ -2503,7 +2524,7 @@ with tab1:
 
 
         st.subheader(
-            "📈 Portfólió vs Benchmark"
+            "Portfólió vs Benchmark"
         )
 
 
@@ -2682,7 +2703,7 @@ with tab1:
 
 
         st.subheader(
-            "🧠 Kockázatelemzés"
+            "Kockázatelemzés"
         )
 
 
@@ -2965,7 +2986,7 @@ A VaR **nem maximális veszteség**, és nem garantálja, hogy ennél nagyobb na
             if not drawdown.empty:
 
                 st.markdown(
-                    "#### 📉 Drawdown"
+                    "#### Drawdown"
                 )
 
 
@@ -3008,7 +3029,7 @@ A VaR **nem maximális veszteség**, és nem garantálja, hogy ennél nagyobb na
         # =============================================
 
         st.markdown(
-            "#### 🧠 Portfólió kockázati értékelés"
+            "#### Portfólió kockázati értékelés"
         )
 
 
@@ -3055,7 +3076,7 @@ A VaR **nem maximális veszteség**, és nem garantálja, hogy ennél nagyobb na
 
 
         st.subheader(
-            "💹 Portfólió Teljesítmény"
+            "Portfólió teljesítmény"
         )
 
 
@@ -3102,37 +3123,72 @@ A VaR **nem maximális veszteség**, és nem garantálja, hogy ennél nagyobb na
 
 
         st.markdown(
-            "#### 💳 Tranzakciós költségek"
+            "#### Tranzakciós költségelemzés"
         )
 
+        koltseg_col1, koltseg_col2, koltseg_col3 = st.columns(3)
 
-        if tranzakcios_dijak:
-
-            dij_oszlopok = st.columns(
-                len(tranzakcios_dijak)
+        with koltseg_col1:
+            st.metric(
+                "Összes tranzakciós díj",
+                f"{tranzakcios_koltsegek['osszes_dij_huf']:,.0f} Ft"
             )
 
-            for col, (
-                deviza,
-                osszeg
-            ) in zip(
+        with koltseg_col2:
+            st.metric(
+                "Átlagos díj / tranzakció",
+                f"{tranzakcios_koltsegek['atlag_dij_huf']:,.0f} Ft"
+            )
+
+        with koltseg_col3:
+            koltseghanyad = tranzakcios_koltsegek.get("koltseghanyad_pct")
+            st.metric(
+                "Költséghányad",
+                f"{koltseghanyad:.3f}%" if koltseghanyad is not None else "N/A"
+            )
+
+        st.caption(
+            "BUY forgalom: "
+            f"{tranzakcios_koltsegek.get('buy_forgalom_huf', 0.0):,.0f} Ft"
+        )
+
+        fx_lefedettseg = tranzakcios_koltsegek.get("fx_lefedettseg_pct", 0.0)
+        fx_hianyzo = tranzakcios_koltsegek.get("fx_hianyzo_devizak", [])
+
+        if fx_lefedettseg >= 99.999:
+            st.success(
+                "FX-lefedettség: 100% — minden szükséges historikus "
+                "devizaárfolyam rendelkezésre áll."
+            )
+        else:
+            hianyzo_szoveg = ", ".join(fx_hianyzo) if fx_hianyzo else "ismeretlen"
+            st.warning(
+                f"FX-lefedettség: {fx_lefedettseg:.1f}%. "
+                f"Hiányzó devizaadat: {hianyzo_szoveg}. "
+                "Az összesített HUF érték emiatt részleges lehet."
+            )
+
+        dijak_devizankent = tranzakcios_koltsegek["dijak_devizankent"]
+
+        if dijak_devizankent:
+            st.caption("Díjak eredeti devizában")
+            dij_oszlopok = st.columns(len(dijak_devizankent))
+
+            for col, (deviza, osszeg) in zip(
                 dij_oszlopok,
-                tranzakcios_dijak.items()
+                dijak_devizankent.items()
             ):
-
                 with col:
-
                     st.metric(
-                        f"Összes díj ({deviza})",
+                        deviza,
                         f"{osszeg:,.2f} {deviza}"
                     )
 
-        else:
-
-            st.metric(
-                "Összes tranzakciós díj",
-                "0"
-            )
+        st.caption(
+            "A HUF értékek a tranzakciók időpontjához tartozó historikus "
+            "devizaárfolyamok alapján készülnek. A költséghányad az összes "
+            "tranzakciós díj és a BUY tranzakciók bruttó HUF-forgalmának aránya."
+        )
 
 
         st.caption(
@@ -3151,7 +3207,7 @@ A VaR **nem maximális veszteség**, és nem garantálja, hogy ennél nagyobb na
 with tab2:
 
     st.subheader(
-        "🌎 Piaci áttekintés"
+        "Piaci áttekintés"
     )
 
 
@@ -3191,7 +3247,7 @@ with tab2:
 
 
     st.subheader(
-        "👀 Market Watchlist"
+        "Market Watchlist"
     )
 
 
@@ -3215,7 +3271,7 @@ with tab2:
         with add_col:
 
             if st.button(
-                "➕ Hozzáadás"
+                "Hozzáadás"
             ):
 
                 ticker = (
@@ -3319,7 +3375,7 @@ with tab2:
 
 
         st.subheader(
-            "📈 Price Chart"
+            "Price Chart"
         )
 
 
@@ -3390,7 +3446,7 @@ with tab2:
 with tab3:
 
     st.subheader(
-        "🔎 Equity Research"
+        "Equity Research"
     )
 
 
@@ -3512,7 +3568,7 @@ with tab3:
 
 
         st.markdown(
-            "### 📊 Valuation"
+            "### Valuation"
         )
 
 
@@ -3572,7 +3628,7 @@ with tab3:
 
 
         st.markdown(
-            "### 📈 Price Range"
+            "### Price Range"
         )
 
 
@@ -3634,7 +3690,7 @@ with tab3:
 with tab4:
 
     st.subheader(
-        "🤖 AI Portfolio Analyst"
+        "AI Portfolio Analyst"
     )
 
 
@@ -3646,7 +3702,7 @@ with tab4:
         st.info(
             "Még nincs elemezhető portfólió. "
             "Adj hozzá legalább egy BUY tranzakciót "
-            "a 💼 Portfólió fülön."
+            "a Portfólió fülön."
         )
 
 
@@ -3654,20 +3710,27 @@ with tab4:
 
         try:
 
-            ai_elemzes = (
-                portfolio_ai_elemzes(
-                    portfolio,
-                    performance,
-                    score
-                )
+            ai_elemzes = portfolio_elemzes_2(
+                portfolio=portfolio,
+                risk=locals().get("risk", {}),
+                risk_score=score,
+                hozam_pct=hozam,
+                koltsegek=tranzakcios_koltsegek,
+                sector_exposure=sector_exposure,
+                currency_exposure=currency_exposure,
+                cash_pct=cash_szazalek,
+                history_days=len(tortenet) if not tortenet.empty else 0,
             )
 
+            st.caption(
+                "Szabályalapú, reprodukálható elemzés a portfólió aktuális "
+                "és historikus adatai alapján. Nem befektetési ajánlás."
+            )
 
-            for uzenet in ai_elemzes:
-
-                st.write(
-                    uzenet
-                )
+            for szekcio in ai_elemzes:
+                st.markdown(f"#### {szekcio['title']}")
+                for uzenet in szekcio["items"]:
+                    st.write(f"- {uzenet}")
 
 
         except Exception as e:
