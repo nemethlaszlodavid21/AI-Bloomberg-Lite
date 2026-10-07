@@ -11,7 +11,7 @@ FX_TICKEREK = {
     "USD": "USDHUF=X",
     "EUR": "EURHUF=X",
     "GBP": "GBPHUF=X",
-    "CHF": "CHFHUF=X"
+    "CHF": "CHFHUF=X",
 }
 
 
@@ -19,28 +19,52 @@ FX_TICKEREK = {
 # SEGÉDFÜGGVÉNY
 # ===================================================
 
-def _deviza_tisztitas(
-    deviza
-):
+def _deviza_tisztitas(deviza):
 
-    deviza = str(
-        deviza
-    ).strip().upper()
-
+    deviza = str(deviza).strip().upper()
 
     if deviza == "HUF":
-
         return deviza
 
-
     if deviza not in FX_TICKEREK:
-
         raise ValueError(
             f"Nem támogatott deviza: {deviza}"
         )
 
-
     return deviza
+
+
+def _close_sorozat(adat):
+
+    if adat is None or adat.empty:
+        return pd.Series(dtype=float)
+
+    if "Close" not in adat.columns:
+        return pd.Series(dtype=float)
+
+    close = adat["Close"]
+
+    # yfinance bizonyos verziókban
+    # DataFrame-et ad vissza egy ticker esetén is
+    if isinstance(close, pd.DataFrame):
+
+        if close.empty:
+            return pd.Series(dtype=float)
+
+        close = close.iloc[:, 0]
+
+    close = close.dropna()
+
+    if close.empty:
+        return pd.Series(dtype=float)
+
+    close.index = (
+        pd.to_datetime(close.index)
+        .tz_localize(None)
+        .normalize()
+    )
+
+    return close
 
 
 # ===================================================
@@ -48,69 +72,33 @@ def _deviza_tisztitas(
 # ===================================================
 
 @st.cache_data(ttl=300, show_spinner=False)
-def aktualis_huf_arfolyam(
-    deviza
-):
+def aktualis_huf_arfolyam(deviza):
 
-    deviza = _deviza_tisztitas(
-        deviza
-    )
-
+    deviza = _deviza_tisztitas(deviza)
 
     if deviza == "HUF":
-
         return 1.0
 
-
-    ticker = FX_TICKEREK[
-        deviza
-    ]
-
+    ticker = FX_TICKEREK[deviza]
 
     try:
 
         adat = (
-            yf.Ticker(
-                ticker
-            )
+            yf.Ticker(ticker)
             .history(
                 period="5d",
                 auto_adjust=False
             )
         )
 
+        close = _close_sorozat(adat)
 
-        if adat.empty:
-
+        if close.empty:
             raise ValueError(
                 f"Nincs aktuális árfolyamadat: {ticker}"
             )
 
-
-        adat = (
-            adat
-            .dropna(
-                subset=[
-                    "Close"
-                ]
-            )
-        )
-
-
-        if adat.empty:
-
-            raise ValueError(
-                f"Nincs használható aktuális "
-                f"árfolyamadat: {ticker}"
-            )
-
-
-        return float(
-            adat[
-                "Close"
-            ].iloc[-1]
-        )
-
+        return float(close.iloc[-1])
 
     except Exception as e:
 
@@ -125,144 +113,114 @@ def aktualis_huf_arfolyam(
 # ===================================================
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def historikus_huf_arfolyam(
-    deviza,
-    datum
-):
+def historikus_huf_arfolyam(deviza, datum):
 
-    deviza = _deviza_tisztitas(
-        deviza
-    )
-
+    deviza = _deviza_tisztitas(deviza)
 
     if deviza == "HUF":
-
         return 1.0
 
+    datum = pd.Timestamp(datum).normalize()
 
-    datum = pd.Timestamp(
-        datum
-    ).normalize()
-
-
-    ticker = FX_TICKEREK[
-        deviza
-    ]
-
+    ticker = FX_TICKEREK[deviza]
 
     # ---------------------------------------------------
-    # Nem minden tranzakciós nap kereskedési nap.
-    # Ezért néhány nappal korábbról is kérünk adatot.
+    # Visszafelé keresési ablak
+    #
+    # Hétvége, ünnepnap vagy hiányzó Yahoo-adat esetén
+    # az utolsó elérhető korábbi árfolyamot használjuk.
     # ---------------------------------------------------
 
-    start = (
-        datum
-        - pd.Timedelta(
-            days=7
+    start = datum - pd.Timedelta(days=10)
+    end = datum + pd.Timedelta(days=1)
+
+    hibak = []
+
+    # ===================================================
+    # 1. PRÓBÁLKOZÁS – yf.download()
+    # ===================================================
+
+    try:
+
+        adat = yf.download(
+            ticker,
+            start=start.strftime("%Y-%m-%d"),
+            end=end.strftime("%Y-%m-%d"),
+            progress=False,
+            auto_adjust=False,
+            threads=False,
         )
-    )
 
+        close = _close_sorozat(adat)
 
-    end = (
-        datum
-        + pd.Timedelta(
-            days=1
+        if not close.empty:
+
+            ervenyes = close[
+                close.index <= datum
+            ]
+
+            if not ervenyes.empty:
+                return float(
+                    ervenyes.iloc[-1]
+                )
+
+        hibak.append(
+            "yf.download nem adott használható adatot"
         )
-    )
 
+    except Exception as e:
+
+        hibak.append(
+            f"yf.download: {e}"
+        )
+
+    # ===================================================
+    # 2. PRÓBÁLKOZÁS – Ticker.history()
+    # ===================================================
 
     try:
 
         adat = (
-            yf.download(
-                ticker,
-                start=start.strftime(
-                    "%Y-%m-%d"
-                ),
-                end=end.strftime(
-                    "%Y-%m-%d"
-                ),
-                progress=False,
-                auto_adjust=False
+            yf.Ticker(ticker)
+            .history(
+                start=start.strftime("%Y-%m-%d"),
+                end=end.strftime("%Y-%m-%d"),
+                auto_adjust=False,
             )
         )
 
+        close = _close_sorozat(adat)
 
-        if adat.empty:
+        if not close.empty:
 
-            raise ValueError(
-                f"Nincs historikus árfolyamadat "
-                f"{datum.date()} dátumhoz."
-            )
+            ervenyes = close[
+                close.index <= datum
+            ]
 
-
-        close = adat[
-            "Close"
-        ].dropna()
-
-
-        # yfinance bizonyos verziókban
-        # egy ticker esetén is DataFrame-et adhat.
-        if isinstance(
-            close,
-            pd.DataFrame
-        ):
-
-            if close.empty:
-
-                raise ValueError(
-                    "A Close oszlop üres."
+            if not ervenyes.empty:
+                return float(
+                    ervenyes.iloc[-1]
                 )
 
-
-            close = close.iloc[
-                :,
-                0
-            ]
-
-
-        close.index = (
-            pd.to_datetime(
-                close.index
-            )
-            .tz_localize(
-                None
-            )
-            .normalize()
+        hibak.append(
+            "Ticker.history nem adott használható adatot"
         )
-
-
-        # ---------------------------------------------------
-        # Csak a tranzakció napján vagy AZELŐTTI
-        # árfolyam használható.
-        # ---------------------------------------------------
-
-        ervenyes = close[
-            close.index
-            <= datum
-        ]
-
-
-        if ervenyes.empty:
-
-            raise ValueError(
-                f"Nem található {deviza}/HUF "
-                f"árfolyam {datum.date()} napjára "
-                f"vagy az azt megelőző napokra."
-            )
-
-
-        return float(
-            ervenyes.iloc[
-                -1
-            ]
-        )
-
 
     except Exception as e:
 
-        raise ValueError(
-            f"{deviza}/HUF historikus árfolyam "
-            f"lekérése sikertelen "
-            f"({datum.date()}): {e}"
+        hibak.append(
+            f"Ticker.history: {e}"
         )
+
+    # ===================================================
+    # HA EGYIK FORRÁS SEM SIKERÜLT
+    # ===================================================
+
+    raise ValueError(
+        f"{deviza}/HUF historikus árfolyam "
+        f"lekérése sikertelen "
+        f"({datum.date()}). "
+        f"Nincs használható árfolyam a "
+        f"{start.date()}–{datum.date()} időszakban. "
+        f"Részletek: {' | '.join(hibak)}"
+    )

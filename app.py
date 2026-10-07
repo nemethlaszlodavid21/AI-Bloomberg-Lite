@@ -3458,7 +3458,7 @@ with tab2:
 with tab3:
 
     st.subheader(
-        "Equity Research"
+        "Részvényelemzés"
     )
 
 
