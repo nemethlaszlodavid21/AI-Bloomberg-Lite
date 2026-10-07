@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
-import yfinance as yf
 
 from market_data import arak_lekerese
+from fx_data import aktualis_huf_arfolyam
 
 
 # ===================================================
@@ -14,104 +14,27 @@ def deviza_huf_arfolyam(
     deviza
 ):
 
-    deviza = str(
-        deviza
-    ).strip().upper()
+    """
+    Aktuális HUF devizaárfolyam lekérése.
 
+    A tényleges adatlekérést az fx_data.py végzi.
 
-    # -----------------------------------------------
-    # HUF
-    # -----------------------------------------------
+    Elsődleges forrás:
+    - Yahoo Finance
 
-    if deviza == "HUF":
+    Fallback:
+    - Frankfurter / MNB
 
-        return 1.0
+    Így a Streamlit Cloud Yahoo rate limitje
+    esetén sem áll le automatikusan a
+    portfólióérték számítása.
+    """
 
-
-    # -----------------------------------------------
-    # YAHOO FX TICKEREK
-    # -----------------------------------------------
-
-    fx_tickerek = {
-
-        "USD":
-            "USDHUF=X",
-
-        "EUR":
-            "EURHUF=X",
-
-        "GBP":
-            "GBPHUF=X",
-
-        "CHF":
-            "CHFHUF=X"
-    }
-
-
-    if deviza not in fx_tickerek:
-
-        raise ValueError(
-            f"Nem támogatott deviza: {deviza}"
-        )
-
-
-    fx_ticker = (
-        fx_tickerek[
+    return float(
+        aktualis_huf_arfolyam(
             deviza
-        ]
+        )
     )
-
-
-    try:
-
-        adat = (
-            yf.Ticker(
-                fx_ticker
-            )
-            .history(
-                period="5d"
-            )
-        )
-
-
-        if adat.empty:
-
-            raise ValueError(
-                f"Nincs árfolyamadat: {fx_ticker}"
-            )
-
-
-        adat = (
-            adat.dropna(
-                subset=[
-                    "Close"
-                ]
-            )
-        )
-
-
-        if adat.empty:
-
-            raise ValueError(
-                f"Nincs használható árfolyamadat: {fx_ticker}"
-            )
-
-
-        arfolyam = float(
-            adat[
-                "Close"
-            ].iloc[-1]
-        )
-
-
-        return arfolyam
-
-
-    except Exception as e:
-
-        raise ValueError(
-            f"{deviza}/HUF árfolyam lekérése sikertelen: {e}"
-        )
 
 
 # ===================================================
@@ -260,6 +183,10 @@ def portfolio_ertek_szamitas(
             )
         )
 
+
+        # -----------------------------------------------
+        # HA NINCS PIACI ÁR
+        # -----------------------------------------------
 
         if aktualis_ar is None:
 

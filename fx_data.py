@@ -24,15 +24,12 @@ FX_TICKEREK = {
 
 def _deviza_tisztitas(deviza):
 
-    deviza = str(
-        deviza
-    ).strip().upper()
+    deviza = str(deviza).strip().upper()
 
     if deviza == "HUF":
         return deviza
 
     if deviza not in FX_TICKEREK:
-
         raise ValueError(
             f"Nem támogatott deviza: {deviza}"
         )
@@ -46,136 +43,42 @@ def _deviza_tisztitas(deviza):
 
 def _close_sorozat(adat):
 
-    if (
-        adat is None
-        or adat.empty
-    ):
-
-        return pd.Series(
-            dtype=float
-        )
+    if adat is None or adat.empty:
+        return pd.Series(dtype=float)
 
     if "Close" not in adat.columns:
-
-        return pd.Series(
-            dtype=float
-        )
+        return pd.Series(dtype=float)
 
     close = adat["Close"]
 
-    # ---------------------------------------------------
-    # yfinance MultiIndex / DataFrame kezelés
-    # ---------------------------------------------------
-
-    if isinstance(
-        close,
-        pd.DataFrame
-    ):
+    if isinstance(close, pd.DataFrame):
 
         if close.empty:
+            return pd.Series(dtype=float)
 
-            return pd.Series(
-                dtype=float
-            )
-
-        close = close.iloc[
-            :,
-            0
-        ]
+        close = close.iloc[:, 0]
 
     close = close.dropna()
 
     if close.empty:
-
-        return pd.Series(
-            dtype=float
-        )
-
-    # ---------------------------------------------------
-    # Index normalizálása
-    # ---------------------------------------------------
+        return pd.Series(dtype=float)
 
     close.index = pd.to_datetime(
         close.index
     )
 
     try:
-
-        close.index = (
-            close.index
-            .tz_localize(None)
-        )
-
+        close.index = close.index.tz_localize(None)
     except TypeError:
-
         pass
 
-    close.index = (
-        close.index
-        .normalize()
-    )
+    close.index = close.index.normalize()
 
     return close
 
 
 # ===================================================
-# AKTUÁLIS DEVIZAÁRFOLYAM
-# ===================================================
-
-@st.cache_data(
-    ttl=300,
-    show_spinner=False
-)
-def aktualis_huf_arfolyam(deviza):
-
-    deviza = _deviza_tisztitas(
-        deviza
-    )
-
-    if deviza == "HUF":
-        return 1.0
-
-    ticker = FX_TICKEREK[
-        deviza
-    ]
-
-    try:
-
-        adat = (
-            yf.Ticker(
-                ticker
-            )
-            .history(
-                period="5d",
-                auto_adjust=False
-            )
-        )
-
-        close = _close_sorozat(
-            adat
-        )
-
-        if close.empty:
-
-            raise ValueError(
-                f"Nincs aktuális árfolyamadat: "
-                f"{ticker}"
-            )
-
-        return float(
-            close.iloc[-1]
-        )
-
-    except Exception as e:
-
-        raise ValueError(
-            f"{deviza}/HUF aktuális árfolyam "
-            f"lekérése sikertelen: {e}"
-        )
-
-
-# ===================================================
-# FRANKFURTER / MNB HISTORIKUS FALLBACK
+# MNB / FRANKFURTER ÁRFOLYAM
 # ===================================================
 
 def _mnb_historikus_arfolyam(
@@ -194,15 +97,16 @@ def _mnb_historikus_arfolyam(
         datum
     ).normalize()
 
-    # ---------------------------------------------------
-    # Több napot próbálunk visszafelé.
-    #
-    # Így hétvégén / ünnepnapon is az utolsó
-    # rendelkezésre álló korábbi MNB árfolyamot
-    # használhatjuk.
-    # ---------------------------------------------------
-
     hibak = []
+
+    # ---------------------------------------------------
+    # Maximum 10 napot keresünk visszafelé.
+    #
+    # Ez kezeli:
+    # - hétvégét
+    # - ünnepnapot
+    # - hiányzó napi adatot
+    # ---------------------------------------------------
 
     for nap_vissza in range(0, 11):
 
@@ -217,7 +121,7 @@ def _mnb_historikus_arfolyam(
             "https://api.frankfurter.dev/"
             "v2/providers/mnb/rate/"
             f"{deviza.lower()}/huf"
-            f"?date="
+            "?date="
             f"{keresett_datum.strftime('%Y-%m-%d')}"
         )
 
@@ -241,9 +145,7 @@ def _mnb_historikus_arfolyam(
                 adat = json.loads(
                     response
                     .read()
-                    .decode(
-                        "utf-8"
-                    )
+                    .decode("utf-8")
                 )
 
             rate = adat.get(
@@ -262,17 +164,14 @@ def _mnb_historikus_arfolyam(
         except Exception as e:
 
             hibak.append(
-                f"{keresett_datum.date()}: "
-                f"{e}"
+                f"{keresett_datum.date()}: {e}"
             )
 
     raise ValueError(
-        "Frankfurter/MNB fallback "
-        "nem adott használható adatot. "
+        "Frankfurter/MNB nem adott "
+        "használható árfolyamot. "
         + (
-            " | ".join(
-                hibak[-3:]
-            )
+            " | ".join(hibak[-3:])
             if hibak
             else ""
         )
@@ -280,7 +179,102 @@ def _mnb_historikus_arfolyam(
 
 
 # ===================================================
-# TÖRTÉNELMI DEVIZAÁRFOLYAM
+# AKTUÁLIS DEVIZAÁRFOLYAM
+# ===================================================
+
+@st.cache_data(
+    ttl=300,
+    show_spinner=False
+)
+def aktualis_huf_arfolyam(deviza):
+
+    deviza = _deviza_tisztitas(
+        deviza
+    )
+
+    if deviza == "HUF":
+        return 1.0
+
+    ticker = FX_TICKEREK[
+        deviza
+    ]
+
+    hibak = []
+
+    # ===================================================
+    # 1. YAHOO FINANCE
+    # ===================================================
+
+    try:
+
+        adat = (
+            yf.Ticker(
+                ticker
+            )
+            .history(
+                period="5d",
+                auto_adjust=False
+            )
+        )
+
+        close = _close_sorozat(
+            adat
+        )
+
+        if not close.empty:
+
+            return float(
+                close.iloc[-1]
+            )
+
+        hibak.append(
+            "Yahoo Finance nem adott "
+            "használható adatot"
+        )
+
+    except Exception as e:
+
+        hibak.append(
+            f"Yahoo Finance: {e}"
+        )
+
+    # ===================================================
+    # 2. FRANKFURTER / MNB FALLBACK
+    # ===================================================
+
+    try:
+
+        mai_datum = (
+            pd.Timestamp.now()
+            .normalize()
+        )
+
+        return float(
+            _mnb_historikus_arfolyam(
+                deviza,
+                mai_datum
+            )
+        )
+
+    except Exception as e:
+
+        hibak.append(
+            f"Frankfurter/MNB: {e}"
+        )
+
+    # ===================================================
+    # MINDEN FORRÁS SIKERTELEN
+    # ===================================================
+
+    raise ValueError(
+        f"{deviza}/HUF aktuális árfolyam "
+        f"lekérése sikertelen. "
+        f"Részletek: {' | '.join(hibak)}"
+    )
+
+
+# ===================================================
+# HISTORIKUS DEVIZAÁRFOLYAM
 # ===================================================
 
 @st.cache_data(
@@ -308,11 +302,7 @@ def historikus_huf_arfolyam(
     ]
 
     # ---------------------------------------------------
-    # 10 napos visszafelé keresési ablak.
-    #
-    # Hétvége, ünnepnap vagy hiányzó Yahoo-adat
-    # esetén az utolsó rendelkezésre álló
-    # korábbi árfolyamot használjuk.
+    # 10 napos visszafelé keresési ablak
     # ---------------------------------------------------
 
     start = (
@@ -332,8 +322,7 @@ def historikus_huf_arfolyam(
     hibak = []
 
     # ===================================================
-    # 1. PRÓBÁLKOZÁS
-    # YAHOO FINANCE – yf.download()
+    # 1. YAHOO – DOWNLOAD
     # ===================================================
 
     try:
@@ -358,8 +347,7 @@ def historikus_huf_arfolyam(
         if not close.empty:
 
             ervenyes = close[
-                close.index
-                <= datum
+                close.index <= datum
             ]
 
             if not ervenyes.empty:
@@ -380,8 +368,7 @@ def historikus_huf_arfolyam(
         )
 
     # ===================================================
-    # 2. PRÓBÁLKOZÁS
-    # YAHOO FINANCE – Ticker.history()
+    # 2. YAHOO – TICKER.HISTORY
     # ===================================================
 
     try:
@@ -408,8 +395,7 @@ def historikus_huf_arfolyam(
         if not close.empty:
 
             ervenyes = close[
-                close.index
-                <= datum
+                close.index <= datum
             ]
 
             if not ervenyes.empty:
@@ -430,8 +416,7 @@ def historikus_huf_arfolyam(
         )
 
     # ===================================================
-    # 3. PRÓBÁLKOZÁS
-    # FRANKFURTER / MNB FALLBACK
+    # 3. MNB / FRANKFURTER FALLBACK
     # ===================================================
 
     try:
@@ -450,7 +435,7 @@ def historikus_huf_arfolyam(
         )
 
     # ===================================================
-    # HA MINDEN FORRÁS SIKERTELEN
+    # MINDEN FORRÁS SIKERTELEN
     # ===================================================
 
     raise ValueError(
@@ -460,6 +445,5 @@ def historikus_huf_arfolyam(
         f"Nincs használható árfolyam a "
         f"{start.date()}–{datum.date()} "
         f"időszakban. "
-        f"Részletek: "
-        f"{' | '.join(hibak)}"
+        f"Részletek: {' | '.join(hibak)}"
     )
